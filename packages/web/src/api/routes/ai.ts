@@ -1,19 +1,33 @@
-const AI_BASE = process.env.AI_GATEWAY_BASE_URL ?? "https://api.openai.com/v1";
-const AI_KEY = process.env.AI_GATEWAY_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? "";
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
 
 export async function callAI(prompt: string, temperature = 0.8): Promise<string> {
-  const res = await fetch(`${AI_BASE}/chat/completions`, {
+  if (!OPENROUTER_KEY) {
+    console.error("[AI] OPENROUTER_API_KEY is not set");
+    return "";
+  }
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${AI_KEY}`,
+      Authorization: `Bearer ${OPENROUTER_KEY}`,
       "Content-Type": "application/json",
+      "HTTP-Referer": process.env.WEBSITE_URL ?? "https://contentbrain.app",
+      "X-Title": "ContentBrain",
     },
     body: JSON.stringify({
-      model: "openai/gpt-4o",
+      model: OPENROUTER_MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature,
     }),
   });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[AI] OpenRouter error ${res.status}:`, err);
+    return "";
+  }
+
   const data = await res.json() as any;
   return data.choices?.[0]?.message?.content ?? "";
 }
