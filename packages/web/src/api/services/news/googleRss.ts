@@ -10,7 +10,7 @@ async function parseRss(url: string): Promise<Array<{ title: string; link?: stri
 
   const xml = await res.text();
 
-  const items: Array<{ title: string; link?: string; contentSnippet?: string }> = [];
+  const items: Array<{ title: string; link?: string; contentSnippet?: string; imageUrl?: string }> = [];
 
   // Simple regex-based RSS item extraction
   const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g);
@@ -21,12 +21,18 @@ async function parseRss(url: string): Promise<Array<{ title: string; link?: stri
     const linkMatch = content.match(/<link[^>]*>(.*?)<\/link>/s);
     const snippetMatch = content.match(/<description[^>]*><!\[CDATA\[(.*?)\]\]><\/description>|<description[^>]*>(.*?)<\/description>/s);
 
+    // Try to extract image: media:content, enclosure, or og:image inside description
+    const mediaMatch = content.match(/<media:content[^>]+url=["']([^"']+)["']/i);
+    const enclosureMatch = content.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image/i);
+    const imgTagMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+    const imageUrl = mediaMatch?.[1] ?? enclosureMatch?.[1] ?? imgTagMatch?.[1];
+
     const title = (titleMatch?.[1] ?? titleMatch?.[2] ?? "").trim();
     const link = (linkMatch?.[1] ?? "").trim();
     const snippet = (snippetMatch?.[1] ?? snippetMatch?.[2] ?? "").trim();
 
     if (title) {
-      items.push({ title, link: link || undefined, contentSnippet: snippet || undefined });
+      items.push({ title, link: link || undefined, contentSnippet: snippet || undefined, imageUrl: imageUrl || undefined });
     }
   }
 
@@ -58,6 +64,7 @@ export async function fetchGoogleRssTrends(niches: string[]): Promise<TrendItem[
               title: cleanTitle,
               url: item.link,
               summary: item.contentSnippet?.slice(0, 300),
+              thumbnailUrl: item.imageUrl,
               engagementScore: 30,
             },
             "google_rss",

@@ -6,6 +6,29 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Decode HTML entities in URLs (e.g. &amp; → &) */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+/**
+ * Best available image for a Reddit post, in priority order:
+ * 1. preview.images[0].source.url  (high-res, always present for link posts)
+ * 2. p.thumbnail if it's an http URL (low-res fallback)
+ */
+function getRedditThumbnail(p: any): string | undefined {
+  const previewUrl = p?.preview?.images?.[0]?.source?.url;
+  if (previewUrl) return decodeHtmlEntities(previewUrl);
+  const thumb = p?.thumbnail;
+  if (typeof thumb === "string" && thumb.startsWith("http")) return decodeHtmlEntities(thumb);
+  return undefined;
+}
+
 export async function fetchRedditTrends(niches: string[]): Promise<TrendItem[]> {
   const token = await getRedditToken();
   const userAgent = process.env.REDDIT_USER_AGENT ?? "ContentBrain/1.0";
@@ -39,7 +62,7 @@ export async function fetchRedditTrends(niches: string[]): Promise<TrendItem[]> 
                 title: p.title,
                 url: `https://reddit.com${p.permalink}`,
                 summary: p.selftext?.slice(0, 300) || undefined,
-                thumbnailUrl: p.thumbnail?.startsWith("http") ? p.thumbnail : undefined,
+                thumbnailUrl: getRedditThumbnail(p),
                 engagementScore: p.score,
                 author: p.subreddit_name_prefixed ?? `r/${sub}`,
               },
