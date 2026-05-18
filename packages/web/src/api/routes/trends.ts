@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../database";
 import * as schema from "../database/schema";
-import { eq, desc, inArray, gt } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { memCache } from "../cache/memCache";
 import { runTrendJob } from "../jobs/trendJob";
@@ -23,6 +23,14 @@ export const trendsRoute = new Hono()
       .get();
 
     const today = new Date().toISOString().slice(0, 10);
+    // Cache key
+    const cacheKey = `trends:${niches.sort().join(",")}:${source}:${limit}`;
+    const cached = memCache.get<any[]>(cacheKey);
+    if (cached) {
+      return c.json({ trends: cached, fromCache: true }, 200);
+    }
+
+    // Check rate limits (only for non-cached requests)
     if (
       profile?.plan === "free" &&
       profile?.lastResetDate === today &&
@@ -32,13 +40,6 @@ export const trendsRoute = new Hono()
         { message: "Daily trend limit reached. Upgrade to Premium.", limitReached: true },
         403
       );
-    }
-
-    // Cache key
-    const cacheKey = `trends:${niches.sort().join(",")}:${source}:${limit}`;
-    const cached = memCache.get<any[]>(cacheKey);
-    if (cached) {
-      return c.json({ trends: cached, fromCache: true }, 200);
     }
 
     // Check DB for fresh trends (not expired)
@@ -115,7 +116,8 @@ export const trendsRoute = new Hono()
       await db
         .update(schema.userProfiles)
         .set({
-          trendCount: (profile.trendCount ?? 0) + 1,
+          trendCount:
+            profile.lastResetDate !== today ? 1 : (profile.trendCount ?? 0) + 1,
           lastResetDate: today,
         })
         .where(eq(schema.userProfiles.userId, user.id));

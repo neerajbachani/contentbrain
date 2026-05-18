@@ -1,9 +1,9 @@
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, Modal, TextInput, ActivityIndicator,
-  ScrollView, Alert, Pressable, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, Pressable, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,6 +30,15 @@ const PLATFORMS = [
   { label: "Custom", value: "custom" },
 ];
 
+function detectPlatformFromUrl(value: string): string | null {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("twitter.com") || normalized.includes("x.com")) return "twitter";
+  if (normalized.includes("reddit.com")) return "reddit";
+  if (normalized.includes("youtube.com") || normalized.includes("youtu.be")) return "youtube";
+  if (normalized.includes("instagram.com")) return "instagram";
+  return null;
+}
+
 function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number }) {
   const c = { twitter: colors.twitter, reddit: colors.reddit, instagram: colors.instagram }[platform] ?? colors.textSecondary;
   const Icon = platform === "twitter" ? TwitterLogoIcon
@@ -51,6 +60,10 @@ function InspirationCard({
       onPress={onPress}
       onLongPress={onLongPress}
     >
+      {item.ogImage ? (
+        <Image source={{ uri: item.ogImage }} style={styles.cardImage} resizeMode="cover" />
+      ) : null}
+
       <View style={styles.cardHeader}>
         <View style={styles.platformRow}>
           <PlatformIcon platform={item.sourcePlatform} />
@@ -106,6 +119,14 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
 
   const qc = useQueryClient();
 
+  useEffect(() => {
+    if (mode !== "url") return;
+    const detected = detectPlatformFromUrl(url);
+    if (detected) {
+      setPlatform(detected);
+    }
+  }, [url, mode]);
+
   async function handleAdd() {
     setLoading(true);
     setError("");
@@ -132,7 +153,7 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
           sourcePlatform: platform,
           type: "text",
           title: ogData.title || null,
-          ogImage: ogData.image || null,
+          ogImage: ogData.imageUrl || null,
         },
       });
 
@@ -339,7 +360,10 @@ export default function CanvasScreen() {
                   if (selectedIds.length > 0) {
                     toggleSelect(item.id);
                     Haptics.selectionAsync();
+                    return;
                   }
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/remix/${item.id}`);
                 }}
                 onLongPress={() => { toggleSelect(item.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}
                 onRemix={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/remix/${item.id}`); }}
@@ -392,6 +416,7 @@ const styles = StyleSheet.create({
   grid: { padding: 12 },
   row: { gap: 12, marginBottom: 12 },
   card: { flex: 1, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 },
+  cardImage: { width: "100%", height: 110, borderRadius: 12, backgroundColor: colors.surfaceElevated },
   cardSelected: { borderColor: colors.accent, borderWidth: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   platformRow: { flexDirection: "row", alignItems: "center", gap: 4 },

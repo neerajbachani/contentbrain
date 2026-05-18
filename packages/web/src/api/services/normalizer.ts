@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 export type TrendSource = "reddit" | "x" | "newsdata" | "google_rss";
 export type PlatformDisplay = "Reddit" | "X" | "News" | "Blog";
 
@@ -30,7 +32,6 @@ export function normalizeTrend(
 ): TrendItem {
   const now = new Date();
   const expires = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-  const { randomUUID } = require("crypto");
 
   return {
     id: String(raw.id ?? randomUUID()),

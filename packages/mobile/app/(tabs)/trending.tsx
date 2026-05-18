@@ -12,15 +12,17 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   RedditLogoIcon, NewspaperIcon, FlameIcon, ArrowSquareOutIcon,
-  SparkleIcon, PlusIcon,
+  SparkleIcon, PlusIcon, TwitterLogoIcon,
 } from "phosphor-react-native";
 
 const NICHES = ["tech", "finance", "fitness", "beauty", "food", "gaming", "travel", "fashion", "business", "crypto", "lifestyle", "sports"];
 
 function TrendCard({ item, onAddToCanvas, onRemix }: any) {
   const isReddit = item.platform === "reddit";
-  const PlatformIcon = isReddit ? RedditLogoIcon : NewspaperIcon;
-  const platformColor = isReddit ? colors.reddit : colors.news;
+  const isX = item.platform === "x";
+  const PlatformIcon = isReddit ? RedditLogoIcon : isX ? TwitterLogoIcon : NewspaperIcon;
+  const platformColor = isReddit ? colors.reddit : isX ? colors.twitter : colors.news;
+  const platformLabel = isReddit ? "Reddit" : isX ? "X" : "News";
 
   return (
     <View style={styles.card}>
@@ -28,7 +30,7 @@ function TrendCard({ item, onAddToCanvas, onRemix }: any) {
         <View style={styles.platformRow}>
           <PlatformIcon size={16} color={platformColor} weight="fill" />
           <Text style={[styles.platformLabel, { color: platformColor }]}>
-            {item.platform === "reddit" ? "Reddit" : "News"}
+            {platformLabel}
           </Text>
         </View>
         {item.engagementScore > 0 && (
@@ -71,8 +73,25 @@ export default function TrendingScreen() {
     queryFn: async () => {
       const res = await api.trends.$get({ query: { niche: selectedNiche } });
       const d = await res.json() as any;
-      if (d && Array.isArray(d.trends)) return d.trends as any[];
-      return [] as any[];
+      if (res.status === 403 && d?.limitReached) {
+        return {
+          trends: [] as any[],
+          limitReached: true,
+          message: d.message ?? "Daily trend limit reached. Upgrade to Premium.",
+        };
+      }
+      if (d && Array.isArray(d.trends)) {
+        return {
+          trends: d.trends as any[],
+          limitReached: false,
+          message: "",
+        };
+      }
+      return {
+        trends: [] as any[],
+        limitReached: false,
+        message: "",
+      };
     },
   });
 
@@ -94,7 +113,9 @@ export default function TrendingScreen() {
     },
   });
 
-  const trends = data ?? [];
+  const trends = data?.trends ?? [];
+  const limitReached = data?.limitReached ?? false;
+  const limitMessage = data?.message ?? "Daily trend limit reached. Upgrade to Premium.";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -120,16 +141,27 @@ export default function TrendingScreen() {
         ))}
       </ScrollView>
 
+      {limitReached ? (
+        <View style={styles.limitBanner}>
+          <Text style={styles.limitBannerTitle}>Daily trend limit reached</Text>
+          <Text style={styles.limitBannerText}>{limitMessage}</Text>
+        </View>
+      ) : null}
+
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.accent} size="large" />
           <Text style={styles.loadingText}>Fetching trends...</Text>
         </View>
-      ) : trends.length === 0 ? (
+      ) : trends.length === 0 && !limitReached ? (
         <View style={styles.centered}>
           <FlameIcon size={48} color={colors.textTertiary} />
           <Text style={styles.emptyTitle}>No trends found</Text>
           <Text style={styles.emptyText}>Try refreshing or switching niche</Text>
+        </View>
+      ) : trends.length === 0 && limitReached ? (
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Upgrade to Premium to refresh more trends.</Text>
         </View>
       ) : (
         <FlatList
@@ -174,6 +206,18 @@ const styles = StyleSheet.create({
   refreshText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   nichesScroll: { flexGrow: 0 },
   nichesContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  limitBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "#F59E0B1A",
+    borderWidth: 1,
+    borderColor: "#F59E0B66",
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  limitBannerTitle: { color: colors.warning, fontSize: 13, fontWeight: "700" },
+  limitBannerText: { color: colors.textSecondary, fontSize: 12 },
   nicheChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   nicheChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   nicheChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "500" },
