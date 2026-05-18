@@ -64,17 +64,19 @@ export const trendsRoute = new Hono()
     // If DB is stale/empty, trigger a fresh fetch in background
     if (dbTrends.length < 5) {
       runTrendJob({ niches, includeNewsData: true }).catch(console.error);
-      // Also do a quick Reddit + RSS fetch synchronously for immediate response
+      // Also do a quick Reddit + News + RSS fetch synchronously for immediate response
       const { fetchRedditTrends } = await import("../services/reddit/redditScraper");
+      const { fetchNewsDataTrends } = await import("../services/news/newsDataScraper");
       const { fetchGoogleRssTrends } = await import("../services/news/googleRss");
       const { aggregateTrends } = await import("../services/normalizer");
 
-      const [redditItems, rssItems] = await Promise.all([
+      const [redditItems, newsItems, rssItems] = await Promise.all([
         fetchRedditTrends(niches).catch(() => []),
+        fetchNewsDataTrends(niches).catch(() => []),
         fetchGoogleRssTrends(niches).catch(() => []),
       ]);
 
-      const freshItems = aggregateTrends(redditItems, rssItems);
+      const freshItems = aggregateTrends(redditItems, newsItems, rssItems);
 
       if (freshItems.length > 0) {
         await db

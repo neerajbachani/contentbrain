@@ -15,7 +15,6 @@ const API_BASE: string =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
   process.env.EXPO_PUBLIC_API_URL ??
   "http://localhost:5173";
-const SESSION_TIMEOUT_MS = 7000;
 
 function logAuth(message: string, extra?: unknown) {
   if (extra !== undefined) {
@@ -30,19 +29,15 @@ function AuthGate() {
     queryKey: ["session-check"],
     queryFn: async () => {
       const token = getToken();
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
       const targetUrl = `${API_BASE}/api/auth/get-session`;
 
       logAuth("session fetch start", {
         targetUrl,
         hasToken: Boolean(token),
-        timeoutMs: SESSION_TIMEOUT_MS,
       });
 
       try {
         const res = await fetch(targetUrl, {
-          signal: controller.signal,
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             "expo-origin": "mobile://",
@@ -59,8 +54,6 @@ function AuthGate() {
           message: (err as Error)?.message,
         });
         throw err;
-      } finally {
-        clearTimeout(timeout);
       }
     },
     retry: 1,
@@ -69,27 +62,36 @@ function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
   const session = (data as any)?.user ?? null;
+  const hasToken = Boolean(getToken());
 
   useEffect(() => {
     logAuth("state update", {
       isPending,
       isError,
       hasSession: Boolean(session),
+      hasToken,
       segment0: segments[0] ?? null,
       error: isError ? (error as Error)?.message : null,
     });
     if (isPending) return;
+
+    if (isError) {
+      logAuth("session check error; skipping auth redirect for now");
+      return;
+    }
+
     const inAuth = segments[0] === "(auth)";
     const inTabs = segments[0] === "(tabs)";
+    const inStack = segments[0] === "remix" || segments[0] === "merge" || segments[0] === "onboarding";
 
-    if (!session && !inAuth) {
+    if (!session && !inAuth && !hasToken) {
       logAuth("redirect -> /(auth)/login");
       router.replace("/(auth)/login");
-    } else if (session && !inTabs) {
+    } else if (session && !inTabs && !inStack) {
       logAuth("redirect -> /(tabs)/canvas");
       router.replace("/(tabs)/canvas");
     }
-  }, [session, isPending, isError, segments, router, error]);
+  }, [session, isPending, isError, segments, router, error, hasToken]);
 
   return (
     <>

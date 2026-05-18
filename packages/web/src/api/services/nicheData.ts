@@ -35,3 +35,5 @@ export const NICHE_KEYWORDS: Record<string, string[]> = {
 };
 
 export const ALL_NICHES = Object.keys(NICHE_SUBREDDITS);
+
+export const BOOTSTRAP_NICHES = ["tech", "business", "fitness"];

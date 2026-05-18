@@ -23,7 +23,7 @@ export const remixesRoute = new Hono()
   .post("/generate", requireAuth, async (c) => {
     const user = c.get("user")!;
     const body = await c.req.json();
-    const { inspirationId, outputType, targetPlatform, style } = body;
+    const { inspirationId, outputType, targetPlatform, style, fuelContext, userTake } = body;
 
     if (!inspirationId || !outputType || !targetPlatform) {
       return c.json({ message: "Missing required fields" }, 400);
@@ -58,11 +58,16 @@ export const remixesRoute = new Hono()
 
     if (!inspiration) return c.json({ message: "Inspiration not found" }, 404);
 
+    const augmentedContent = fuelContext
+      ? `${inspiration.rawContent}\n\n---\nCommunity reactions to factor in:\n${fuelContext}`
+      : inspiration.rawContent;
+
     const result = await remixContent(
-      inspiration.rawContent,
+      augmentedContent,
       outputType,
       targetPlatform,
-      style ?? inspiration.writingStyle ?? "casual"
+      style ?? inspiration.writingStyle ?? "casual",
+      typeof userTake === "string" ? userTake.trim() || undefined : undefined
     );
 
     const id = randomUUID();

@@ -5,6 +5,8 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { processInspiration } from "./ai";
 import { randomUUID } from "crypto";
+import { fetchRedditContext } from "../services/context/redditContext";
+import { fetchAIContext } from "../services/context/aiContext";
 
 export const inspirationsRoute = new Hono()
   .get("/", requireAuth, async (c) => {
@@ -82,4 +84,46 @@ export const inspirationsRoute = new Hono()
       .get();
     if (!item) return c.json({ message: "Not found" }, 404);
     return c.json({ inspiration: item }, 200);
+  })
+  .get("/:id/context", requireAuth, async (c) => {
+    const user = c.get("user")!;
+    const { id } = c.req.param();
+
+    const item = await db
+      .select()
+      .from(schema.inspirations)
+      .where(and(eq(schema.inspirations.id, id), eq(schema.inspirations.userId, user.id)))
+      .get();
+
+    if (!item) return c.json({ message: "Not found" }, 404);
+
+    const platform = item.sourcePlatform?.toLowerCase() ?? "";
+    const isReddit = platform === "reddit" || (item.sourceUrl ?? "").includes("reddit.com");
+    const isX = platform === "twitter" || platform === "x" ||
+      (item.sourceUrl ?? "").includes("twitter.com") ||
+      (item.sourceUrl ?? "").includes("x.com");
+
+    let mode: "reddit" | "x" | "ai";
+    let comments: any[] = [];
+    let relatedPosts: any[] = [];
+
+    if (isReddit && item.sourceUrl) {
+      mode = "reddit";
+      const result = await fetchRedditContext(item.sourceUrl);
+      if (result) {
+        comments = result.comments;
+        relatedPosts = result.relatedPosts;
+      }
+    } else {
+      mode = isX ? "x" : "ai";
+      let keyIdeas: string[] = [];
+      let tags: string[] = [];
+      try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
+      try { tags = JSON.parse(item.tags || "[]"); } catch {}
+      const result = await fetchAIContext(item.rawContent, keyIdeas, tags, isX ? "x" : "generic");
+      comments = result.comments;
+      relatedPosts = result.relatedPosts;
+    }
+
+    return c.json({ mode, comments, relatedPosts }, 200);
   });

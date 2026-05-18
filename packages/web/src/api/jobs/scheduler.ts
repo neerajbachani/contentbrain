@@ -1,4 +1,5 @@
 import { runTrendJob } from "./trendJob";
+import { BOOTSTRAP_NICHES } from "../services/nicheData";
 
 // Simple cron-like scheduler using setInterval (no external dep needed)
 // For production, swap with node-cron
@@ -9,6 +10,14 @@ export function startScheduler() {
   if (schedulerStarted) return;
   schedulerStarted = true;
 
+  console.log("[Scheduler] Running startup bootstrap fetch...");
+  runTrendJob({
+    niches: BOOTSTRAP_NICHES,
+    includeNewsData: true,
+    includeApify: false,
+    maxItemsPerPlatform: 10,
+  }).catch(console.error);
+
   // Google RSS every 15 minutes (free, zero-cost)
   setInterval(
     async () => {
@@ -18,14 +27,14 @@ export function startScheduler() {
     15 * 60 * 1000
   );
 
-  // Full job (Reddit + NewsData) every 6 hours
+  // Full job (Reddit + NewsData + RSS) every 60 minutes
   setInterval(
     async () => {
-      console.log("[Scheduler] Running 6-hour full trend job...");
+      console.log("[Scheduler] Running 60-min full trend job...");
       await runTrendJob({ includeApify: false, includeNewsData: true }).catch(console.error);
     },
-    6 * 60 * 60 * 1000
+    60 * 60 * 1000
   );
 
-  console.log("[Scheduler] Started: 15-min RSS + 6h full job");
+  console.log("[Scheduler] Started: bootstrap + 15-min RSS + 60-min full job");
 }

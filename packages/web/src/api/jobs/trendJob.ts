@@ -14,6 +14,13 @@ export interface TrendJobOptions {
   includeNewsData?: boolean;
   googleRssOnly?: boolean;
   niches?: string[];
+  maxItemsPerPlatform?: number;
+}
+
+function getJobMode(options: TrendJobOptions): string {
+  if (options.maxItemsPerPlatform) return "bootstrap";
+  if (options.googleRssOnly) return "rss-only";
+  return "full";
 }
 
 export async function runTrendJob(options: TrendJobOptions = {}): Promise<number> {
@@ -22,7 +29,12 @@ export async function runTrendJob(options: TrendJobOptions = {}): Promise<number
     includeNewsData = true,
     googleRssOnly = false,
     niches = ALL_NICHES,
+    maxItemsPerPlatform,
   } = options;
+
+  const jobMode = getJobMode(options);
+  const cap = (items: TrendItem[]) =>
+    maxItemsPerPlatform ? items.slice(0, maxItemsPerPlatform) : items;
 
   try {
     // Run sources in parallel, settle all
@@ -33,13 +45,13 @@ export async function runTrendJob(options: TrendJobOptions = {}): Promise<number
       fetchGoogleRssTrends(niches),
     ]);
 
-    const redditData   = reddit.status    === "fulfilled" ? reddit.value    : [];
-    const xData        = x.status         === "fulfilled" ? x.value         : [];
-    const newsdataData = newsdata.status   === "fulfilled" ? newsdata.value  : [];
-    const googleData   = googleRss.status  === "fulfilled" ? googleRss.value : [];
+    const redditData   = cap(reddit.status    === "fulfilled" ? reddit.value    : []);
+    const xData        = cap(x.status         === "fulfilled" ? x.value         : []);
+    const newsdataData = cap(newsdata.status   === "fulfilled" ? newsdata.value  : []);
+    const googleData   = cap(googleRss.status  === "fulfilled" ? googleRss.value : []);
 
     console.log(
-      `[TrendJob] Fetched: Reddit=${redditData.length} X=${xData.length} News=${newsdataData.length} RSS=${googleData.length}`
+      `[TrendJob][${jobMode}] Fetched: Reddit=${redditData.length} X=${xData.length} News=${newsdataData.length} RSS=${googleData.length}`
     );
 
     const aggregated = aggregateTrends(redditData, xData, newsdataData, googleData);

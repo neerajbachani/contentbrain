@@ -52,27 +52,48 @@ export async function remixContent(
   originalContent: string,
   outputType: string,
   targetPlatform: string,
-  style: string
+  style: string,
+  userTake?: string
 ) {
-  const prompt = `You are a viral content strategist. Take this inspiration and generate 3 unique content variations.
+  const takeBlock = userTake?.trim()
+    ? `
+Creator's perspective on this content:
+"${userTake.trim()}"
 
-Original inspiration:
-"${originalContent}"
+Additional rules when a creator perspective is provided:
+- ALL three variations must be grounded in the creator's stated perspective
+- Do NOT contradict the creator's angle
+- Express the same perspective three different ways: directly, through a story/example, and through a provocative hook
+- The creator's voice and opinion should feel authentic in every variation`
+    : "";
 
-Output format: ${outputType}
-Target platform: ${targetPlatform}
-Writing style: ${style}
-
-Rules:
-- DO NOT copy the original — reimagine it with a fresh angle
+  const rulesBlock = userTake?.trim()
+    ? `- Ground every variation in the creator's stated perspective above
+- Each variation must use a different execution: direct statement, story/example, provocative hook
+- Keep platform best practices in mind
+- Make it feel authentic, not AI-generated`
+    : `- DO NOT copy the original — reimagine it with a fresh angle
 - Each variation must have a different hook/approach
 - Keep platform best practices in mind
-- Make it feel authentic, not AI-generated
+- Make it feel authentic, not AI-generated`;
 
-Return valid JSON only (no markdown):
-{
-  "variations": [
+  const variationLabels = userTake?.trim()
+    ? `    {
+      "label": "The Direct Take",
+      "content": "...",
+      "why_it_works": "one line explanation"
+    },
     {
+      "label": "The Story Version",
+      "content": "...",
+      "why_it_works": "one line explanation"
+    },
+    {
+      "label": "The Hook",
+      "content": "...",
+      "why_it_works": "one line explanation"
+    }`
+    : `    {
       "label": "The Direct Angle",
       "content": "...",
       "why_it_works": "one line explanation"
@@ -86,7 +107,24 @@ Return valid JSON only (no markdown):
       "label": "The Story Angle",
       "content": "...",
       "why_it_works": "one line explanation"
-    }
+    }`;
+
+  const prompt = `You are a viral content strategist. Take this inspiration and generate 3 unique content variations.
+
+Original inspiration:
+"${originalContent}"
+
+Output format: ${outputType}
+Target platform: ${targetPlatform}
+Writing style: ${style}${takeBlock}
+
+Rules:
+${rulesBlock}
+
+Return valid JSON only (no markdown):
+{
+  "variations": [
+${variationLabels}
   ]
 }`;
 
