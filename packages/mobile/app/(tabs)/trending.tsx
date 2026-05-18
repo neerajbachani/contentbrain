@@ -1,6 +1,6 @@
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Linking, ScrollView,
+  ActivityIndicator, RefreshControl, Linking, ScrollView, Image,
 } from "react-native";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -26,38 +26,49 @@ function TrendCard({ item, onAddToCanvas, onRemix }: any) {
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={styles.platformRow}>
-          <PlatformIcon size={16} color={platformColor} weight="fill" />
-          <Text style={[styles.platformLabel, { color: platformColor }]}>
-            {platformLabel}
-          </Text>
-        </View>
-        {item.engagementScore > 0 && (
-          <View style={styles.scoreBadge}>
-            <FlameIcon size={12} color={colors.warning} weight="fill" />
-            <Text style={styles.scoreText}>{(item.engagementScore / 1000).toFixed(1)}k</Text>
+      {/* Thumbnail */}
+      {item.thumbnailUrl ? (
+        <Image
+          source={{ uri: item.thumbnailUrl }}
+          style={styles.thumbnail}
+          resizeMode="cover"
+        />
+      ) : null}
+
+      <View style={[styles.cardBody, !item.thumbnailUrl && styles.cardBodyNoPad]}>
+        <View style={styles.cardTop}>
+          <View style={styles.platformRow}>
+            <PlatformIcon size={16} color={platformColor} weight="fill" />
+            <Text style={[styles.platformLabel, { color: platformColor }]}>
+              {platformLabel}
+            </Text>
           </View>
-        )}
-      </View>
+          {item.engagementScore > 0 && (
+            <View style={styles.scoreBadge}>
+              <FlameIcon size={12} color={colors.warning} weight="fill" />
+              <Text style={styles.scoreText}>{(item.engagementScore / 1000).toFixed(1)}k</Text>
+            </View>
+          )}
+        </View>
 
-      <Text style={styles.cardTitle} numberOfLines={3}>{item.title}</Text>
-      {item.summary ? <Text style={styles.cardSummary} numberOfLines={2}>{item.summary}</Text> : null}
+        <Text style={styles.cardTitle} numberOfLines={3}>{item.title}</Text>
+        {item.summary ? <Text style={styles.cardSummary} numberOfLines={2}>{item.summary}</Text> : null}
 
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.addBtn} onPress={onAddToCanvas}>
-          <PlusIcon size={14} color={colors.accent} weight="bold" />
-          <Text style={styles.addBtnText}>Add to Canvas</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
-          <SparkleIcon size={14} color={colors.background} weight="fill" />
-          <Text style={styles.remixBtnText}>Remix</Text>
-        </TouchableOpacity>
-        {item.url && (
-          <TouchableOpacity onPress={() => Linking.openURL(item.url)}>
-            <ArrowSquareOutIcon size={18} color={colors.textTertiary} />
+        <View style={styles.cardActions}>
+          <TouchableOpacity style={styles.addBtn} onPress={onAddToCanvas}>
+            <PlusIcon size={14} color={colors.accent} weight="bold" />
+            <Text style={styles.addBtnText}>Add to Canvas</Text>
           </TouchableOpacity>
-        )}
+          <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
+            <SparkleIcon size={14} color={colors.background} weight="fill" />
+            <Text style={styles.remixBtnText}>Remix</Text>
+          </TouchableOpacity>
+          {item.url && (
+            <TouchableOpacity onPress={() => Linking.openURL(item.url)}>
+              <ArrowSquareOutIcon size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -104,6 +115,7 @@ export default function TrendingScreen() {
           sourcePlatform: item.platform,
           type: "text",
           title: item.title,
+          ogImage: item.thumbnailUrl ?? null,
         },
       });
     },
@@ -183,6 +195,7 @@ export default function TrendingScreen() {
                     sourcePlatform: item.platform,
                     type: "text",
                     title: item.title,
+                    ogImage: item.thumbnailUrl ?? null,
                   },
                 });
                 const d = await res.json();
@@ -227,7 +240,10 @@ const styles = StyleSheet.create({
   emptyTitle: { ...typography.heading, color: colors.textSecondary },
   emptyText: { ...typography.caption, color: colors.textTertiary },
   list: { padding: 16, gap: 12 },
-  card: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 10 },
+  card: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  thumbnail: { width: "100%", height: 160, backgroundColor: colors.surfaceElevated },
+  cardBody: { padding: 14, gap: 8 },
+  cardBodyNoPad: { paddingTop: 14 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   platformRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   platformLabel: { fontSize: 12, fontWeight: "600" },
