@@ -109,12 +109,7 @@ export async function resolveXThumbnailOnly(url: string): Promise<string | null>
     if (syndication) return syndication;
   }
 
-  const handleMatch = url.match(/(?:twitter\.com|x\.com)\/(@?[\w]+)\/status/i);
-  if (handleMatch) {
-    const handle = handleMatch[1].replace(/^@/, "");
-    return `https://unavatar.io/twitter/${handle}`;
-  }
-
+  // No real media found — return null rather than falling back to profile picture
   return null;
 }
 
