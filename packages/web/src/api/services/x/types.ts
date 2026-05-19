@@ -2,7 +2,12 @@ import type { ContextComment, ContextPost } from "../context/redditContext";
 
 export type XDataSource = "auto" | "xai" | "apify";
 export type XContextMode = "xai" | "apify" | "ai";
-export type XContextIntent = "context" | "enrich" | "research";
+export type XContextIntent =
+  | "context"
+  | "enrich"
+  | "research"
+  | "trending_global"
+  | "trending_niche";
 
 export interface XContextResult {
   mode: XContextMode;

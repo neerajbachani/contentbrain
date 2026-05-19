@@ -1,9 +1,44 @@
 import type { ContextComment, ContextPost } from "../context/redditContext";
+import { parseEngagementFromText } from "./xEngagement";
+import { sanitizeXText } from "./xTextSanitizer";
 import { logXContext } from "./logger";
 
 function extractUrlsFromText(text: string): string[] {
   const matches = text.match(/https?:\/\/(?:twitter\.com|x\.com)\/\S+/gi) ?? [];
   return [...new Set(matches.map((u) => u.replace(/[)\],.]+$/, "")))];
+}
+
+function extractTwitterMediaUrls(text: string): string[] {
+  const matches =
+    text.match(/https?:\/\/(?:pbs\.twimg\.com|video\.twimg\.com)\/\S+/gi) ?? [];
+  return [...new Set(matches.map((u) => u.replace(/[)\],."']+$/, "")))];
+}
+
+function citationImageUrl(obj: Record<string, unknown>): string | undefined {
+  const fields = [
+    obj.image_url,
+    obj.thumbnail_url,
+    obj.media_url,
+    obj.media_url_https,
+    obj.preview_image_url,
+  ];
+  for (const f of fields) {
+    if (typeof f === "string" && f.startsWith("http")) return f;
+  }
+  if (obj.media && typeof obj.media === "object") {
+    const m = obj.media as Record<string, unknown>;
+    if (typeof m.media_url_https === "string") return m.media_url_https;
+    if (typeof m.url === "string") return m.url;
+  }
+  return undefined;
+}
+
+function isXUrl(url: string): boolean {
+  return url.includes("x.com/") || url.includes("twitter.com/");
+}
+
+function stripUrls(text: string): string {
+  return text.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
 }
 
 function collectOutputText(data: any): string {
@@ -30,10 +65,7 @@ function collectOutputText(data: any): string {
       }
       if (item?.type === "x_search_call" || item?.type === "web_search_call") {
         const resultText =
-          item?.result ??
-          item?.output ??
-          item?.content ??
-          item?.summary;
+          item?.result ?? item?.output ?? item?.content ?? item?.summary;
         if (typeof resultText === "string" && resultText.trim()) {
           parts.push(resultText);
         } else if (resultText && typeof resultText === "object") {
@@ -86,12 +118,50 @@ function collectCitations(data: any): unknown[] {
   return found;
 }
 
+function citationText(obj: Record<string, unknown>): string | undefined {
+  const fields = [
+    obj.text,
+    obj.snippet,
+    obj.description,
+    obj.content,
+    obj.headline,
+    obj.summary,
+    obj.excerpt,
+  ];
+  for (const f of fields) {
+    if (typeof f === "string" && f.trim().length > 8) return f.trim().slice(0, 400);
+  }
+  return undefined;
+}
+
+function citationTitle(obj: Record<string, unknown>, url: string, summary?: string): string {
+  const candidates = [obj.title, obj.headline, obj.name, obj.text, obj.snippet];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 8 && !c.startsWith("http")) {
+      return sanitizeXText(c.trim().slice(0, 280)) ?? url;
+    }
+  }
+  if (summary && summary.length > 12) return summary.slice(0, 280);
+  return url;
+}
+
+function enrichPostFromText(post: ContextPost, sourceText: string): ContextPost {
+  const combined = `${post.title} ${post.summary ?? ""} ${sourceText}`;
+  const eng = parseEngagementFromText(combined);
+  if (!eng) return post;
+  return {
+    ...post,
+    score: eng.rankScore,
+    engagementLabel: eng.label,
+  };
+}
+
 function parseCitationObjects(citations: unknown[]): ContextPost[] {
   const posts: ContextPost[] = [];
 
   for (const c of citations) {
     if (typeof c === "string") {
-      if (c.includes("x.com") || c.includes("twitter.com")) {
+      if (isXUrl(c)) {
         posts.push({ title: c, url: c, score: 0, platform: "x" });
       }
       continue;
@@ -104,26 +174,107 @@ function parseCitationObjects(citations: unknown[]): ContextPost[] {
         (obj.post_url as string) ??
         (obj.link as string) ??
         (obj.uri as string);
-      const title =
-        (obj.title as string) ??
-        (obj.text as string) ??
-        (obj.snippet as string) ??
-        url ??
-        "X post";
 
-      if (url && (url.includes("x.com") || url.includes("twitter.com"))) {
-        posts.push({
-          title: String(title).slice(0, 280),
-          url,
-          score: 0,
-          platform: "x",
-          summary: typeof obj.text === "string" ? obj.text.slice(0, 400) : undefined,
-        });
-      }
+      if (!url || !isXUrl(url)) continue;
+
+      const rawSummary = citationText(obj);
+      const summary = sanitizeXText(rawSummary);
+      const title = citationTitle(obj, url, summary);
+      const sourceText = combinedCitationSource(obj, rawSummary);
+      const thumbFromCitation = citationImageUrl(obj);
+      const thumbFromText = extractTwitterMediaUrls(sourceText)[0];
+
+      posts.push(
+        enrichPostFromText(
+          {
+            title,
+            url,
+            score: 0,
+            platform: "x",
+            summary,
+            thumbnailUrl: thumbFromCitation ?? thumbFromText,
+          },
+          sourceText
+        )
+      );
     }
   }
 
   return posts;
+}
+
+function combinedCitationSource(obj: Record<string, unknown>, summary?: string): string {
+  return [obj.text, obj.snippet, obj.description, summary].filter((x) => typeof x === "string").join(" ");
+}
+
+/** Associate nearby output-text chunks with X URLs for richer summaries. */
+function extractPostsFromOutputText(outputText: string): ContextPost[] {
+  const posts: ContextPost[] = [];
+  const chunks = outputText
+    .split(/\n{2,}/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 15);
+
+  for (const chunk of chunks) {
+    const urls = extractUrlsFromText(chunk);
+    if (urls.length === 0) continue;
+
+    const summaryText = sanitizeXText(stripUrls(chunk)) ?? "";
+    const mediaInChunk = extractTwitterMediaUrls(chunk);
+    urls.forEach((url, idx) => {
+      const title =
+        summaryText.length > 12
+          ? summaryText.slice(0, 280)
+          : url;
+      posts.push(
+        enrichPostFromText(
+          {
+            title,
+            url,
+            score: 0,
+            platform: "x",
+            summary: summaryText.length > 12 ? summaryText.slice(0, 400) : undefined,
+            thumbnailUrl: mediaInChunk[idx] ?? mediaInChunk[0],
+          },
+          chunk
+        )
+      );
+    });
+  }
+
+  return posts;
+}
+
+function mergePosts(posts: ContextPost[]): ContextPost[] {
+  const byUrl = new Map<string, ContextPost>();
+
+  for (const post of posts) {
+    if (!post.url) continue;
+    const key = post.url.replace(/[)\],.]+$/, "");
+    const existing = byUrl.get(key);
+    if (!existing) {
+      byUrl.set(key, { ...post, url: key });
+      continue;
+    }
+    const existingRich = (existing.summary?.length ?? 0) + (existing.title?.length ?? 0);
+    const incomingRich = (post.summary?.length ?? 0) + (post.title?.length ?? 0);
+    const merged: ContextPost = {
+      ...existing,
+      url: key,
+      thumbnailUrl: existing.thumbnailUrl ?? post.thumbnailUrl,
+    };
+    if (incomingRich > existingRich) {
+      byUrl.set(key, {
+        ...post,
+        url: key,
+        thumbnailUrl: post.thumbnailUrl ?? existing.thumbnailUrl,
+      });
+    } else {
+      byUrl.set(key, merged);
+    }
+  }
+
+  return [...byUrl.values()];
 }
 
 export function parseXaiResponsesPayload(data: any): {
@@ -157,9 +308,7 @@ export function parseXaiResponsesPayload(data: any): {
       }
     }
 
-    for (const url of extractUrlsFromText(outputText)) {
-      relatedPosts.push({ title: url, url, score: 0, platform: "x" });
-    }
+    relatedPosts.push(...extractPostsFromOutputText(outputText));
   }
 
   const citations = collectCitations(data);
@@ -167,18 +316,23 @@ export function parseXaiResponsesPayload(data: any): {
     relatedPosts.push(...parseCitationObjects(citations));
   }
 
-  const seen = new Set<string>();
-  const dedupedPosts = relatedPosts.filter((p) => {
-    if (seen.has(p.url)) return false;
-    seen.add(p.url);
-    return true;
-  });
+  const dedupedPosts = mergePosts(relatedPosts);
+
+  const urlOnly = dedupedPosts.filter(
+    (p) => !p.summary && (p.title.startsWith("http") || p.title === p.url)
+  ).length;
+  const textEnriched = dedupedPosts.length - urlOnly;
+
+  const withThumbnail = dedupedPosts.filter((p) => p.thumbnailUrl).length;
 
   logXContext("parse_xai_response", {
     outputTextLen: outputText.length,
     commentCount: comments.length,
     postCount: dedupedPosts.length,
     citationCount: citations.length,
+    urlOnly,
+    textEnriched,
+    withThumbnail,
   });
 
   return { comments, relatedPosts: dedupedPosts };

@@ -23,6 +23,34 @@ function isTwitterUrl(url: string): boolean {
   }
 }
 
+export function parseTweetId(url: string): string | null {
+  const match = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/i);
+  return match?.[1] ?? null;
+}
+
+async function fetchTweetSyndicationThumbnail(tweetId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&lang=en`,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; ContentBrain/1.0)" } }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      photos?: { url?: string }[];
+      video?: { poster?: string };
+      entities?: { media?: { media_url_https?: string }[] };
+    };
+    return (
+      data?.photos?.[0]?.url ??
+      data?.video?.poster ??
+      data?.entities?.media?.[0]?.media_url_https ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function stripHtml(input: string): string {
   return input
     .replace(/<[^>]*>/g, " ")
@@ -58,11 +86,54 @@ async function persistPreview(preview: LinkPreview): Promise<void> {
     });
 }
 
+/** Resolve X post image only (syndication + oEmbed), bypassing stale null DB cache. */
+export async function resolveXThumbnailOnly(url: string): Promise<string | null> {
+  if (!isTwitterUrl(url)) return null;
+
+  try {
+    const oembedRes = await fetch(
+      `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; ContentBrain/1.0)" } }
+    );
+    if (oembedRes.ok) {
+      const oembed = (await oembedRes.json()) as { thumbnail_url?: string };
+      if (oembed.thumbnail_url) return String(oembed.thumbnail_url);
+    }
+  } catch {
+    /* fall through */
+  }
+
+  const tweetId = parseTweetId(url);
+  if (tweetId) {
+    const syndication = await fetchTweetSyndicationThumbnail(tweetId);
+    if (syndication) return syndication;
+  }
+
+  const handleMatch = url.match(/(?:twitter\.com|x\.com)\/(@?[\w]+)\/status/i);
+  if (handleMatch) {
+    const handle = handleMatch[1].replace(/^@/, "");
+    return `https://unavatar.io/twitter/${handle}`;
+  }
+
+  return null;
+}
+
 export async function getLinkPreview(url: string): Promise<LinkPreview> {
   // 1. In-memory cache (1h)
   const cacheKey = `og:${url}`;
   const cached = memCache.get<LinkPreview>(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (!cached.imageUrl && isTwitterUrl(url)) {
+      const imageUrl = await resolveXThumbnailOnly(url);
+      if (imageUrl) {
+        const updated = { ...cached, imageUrl };
+        memCache.set(cacheKey, updated, 3600);
+        await persistPreview(updated);
+        return updated;
+      }
+    }
+    return cached;
+  }
 
   // 2. DB cache
   const dbCached = await db
@@ -72,11 +143,29 @@ export async function getLinkPreview(url: string): Promise<LinkPreview> {
     .get();
 
   if (dbCached) {
+    let imageUrl = dbCached.imageUrl;
+    if (!imageUrl && isTwitterUrl(url)) {
+      imageUrl = await resolveXThumbnailOnly(url);
+      if (imageUrl) {
+        const updated: LinkPreview = {
+          url: dbCached.url,
+          title: dbCached.title,
+          description: dbCached.description,
+          imageUrl,
+          siteName: dbCached.siteName,
+          favicon: dbCached.favicon,
+        };
+        await persistPreview(updated);
+        memCache.set(cacheKey, updated, 3600);
+        return updated;
+      }
+    }
+
     const preview: LinkPreview = {
       url: dbCached.url,
       title: dbCached.title,
       description: dbCached.description,
-      imageUrl: dbCached.imageUrl,
+      imageUrl,
       siteName: dbCached.siteName,
       favicon: dbCached.favicon,
     };
@@ -93,11 +182,19 @@ export async function getLinkPreview(url: string): Promise<LinkPreview> {
       if (oembedRes.ok) {
         const oembed = await oembedRes.json() as any;
         const description = stripHtml(String(oembed?.html ?? ""));
+        let imageUrl = oembed?.thumbnail_url ? String(oembed.thumbnail_url) : null;
+        if (!imageUrl) {
+          const tweetId = parseTweetId(url);
+          if (tweetId) {
+            imageUrl = await fetchTweetSyndicationThumbnail(tweetId);
+          }
+        }
+
         const preview: LinkPreview = {
           url,
           title: oembed?.author_name ? String(oembed.author_name) : null,
           description: description || null,
-          imageUrl: oembed?.thumbnail_url ? String(oembed.thumbnail_url) : null,
+          imageUrl,
           siteName: "X",
         };
 
@@ -107,6 +204,23 @@ export async function getLinkPreview(url: string): Promise<LinkPreview> {
       }
     } catch {
       // Fall through to OG scraping below.
+    }
+
+    const tweetId = parseTweetId(url);
+    if (tweetId) {
+      const syndicationImage = await fetchTweetSyndicationThumbnail(tweetId);
+      if (syndicationImage) {
+        const preview: LinkPreview = {
+          url,
+          title: null,
+          description: null,
+          imageUrl: syndicationImage,
+          siteName: "X",
+        };
+        await persistPreview(preview);
+        memCache.set(cacheKey, preview, 3600);
+        return preview;
+      }
     }
   }
 

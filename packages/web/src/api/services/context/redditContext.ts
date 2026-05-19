@@ -13,6 +13,9 @@ export interface ContextPost {
   score: number;
   platform: string;
   summary?: string;
+  thumbnailUrl?: string;
+  trendTier?: "global" | "niche";
+  engagementLabel?: string;
 }
 
 function parseRedditUrl(url: string): { subreddit: string; postId: string } | null {

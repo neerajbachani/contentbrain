@@ -44,6 +44,10 @@ export const remixes = sqliteTable("remixes", {
   outputContent: text("output_content").notNull(),
   platform: text("platform"),
   variations: text("variations").notNull().default("[]"), // JSON array
+  imageUrl: text("image_url"),
+  imageModel: text("image_model"),
+  imagePrompt: text("image_prompt"),
+  imageMetaJson: text("image_meta_json"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

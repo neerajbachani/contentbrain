@@ -1,6 +1,6 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal, Pressable,
+  TextInput, ActivityIndicator, Alert, Image,
 } from "react-native";
 import { useState, useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -36,7 +36,13 @@ export default function MergeScreen() {
 
   const [outputType, setOutputType] = useState<OutputType>("tweet_thread");
   const [context, setContext] = useState("");
+  const [generateImage, setGenerateImage] = useState(false);
+  const [useReferences, setUseReferences] = useState(true);
+  const [imagePrompt, setImagePrompt] = useState("");
   const [result, setResult] = useState<string | null>(null);
+  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [lastRemixId, setLastRemixId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -56,20 +62,38 @@ export default function MergeScreen() {
     inspirationIds.includes(i.id)
   );
 
+  const refsAvailable = selectedInspirations.filter((i: any) => i.ogImage?.trim()).length;
+
   const mergeMutation = useMutation({
     mutationFn: async () => {
       const res = await api.merge.generate.$post({
-        json: { inspirationIds, outputType, context: context.trim() || undefined },
+        json: {
+          inspirationIds,
+          outputType,
+          context: context.trim() || undefined,
+          generateImage,
+          useReferences: generateImage ? useReferences : undefined,
+          imagePrompt: generateImage && imagePrompt.trim() ? imagePrompt.trim() : undefined,
+          referenceMode: "auto",
+        },
       });
       if (res.status === 403) {
         const data = await res.json() as any;
         throw Object.assign(new Error(data.message), { limitReached: true });
       }
       if (!res.ok) throw new Error("Merge failed");
-      return res.json() as Promise<{ content: string; remix: any }>;
+      return res.json() as Promise<{
+        content: string;
+        remix: any;
+        image?: string | null;
+        imageError?: string;
+      }>;
     },
     onSuccess: (data) => {
       setResult(data.content);
+      setResultImage(data.image ?? data.remix?.imageUrl ?? null);
+      setImageError(data.imageError ?? null);
+      setLastRemixId(data.remix?.id ?? null);
       setSaved(true); // auto-saved by API
       queryClient.invalidateQueries({ queryKey: ["remixes"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -99,6 +123,30 @@ export default function MergeScreen() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const regenerateImageMutation = useMutation({
+    mutationFn: async () => {
+      if (!lastRemixId) throw new Error("No merge to regenerate");
+      const res = await api.merge["regenerate-image"].$post({
+        json: {
+          remixId: lastRemixId,
+          useReferences,
+          imagePrompt: imagePrompt.trim() || undefined,
+          referenceMode: "auto",
+        },
+      });
+      if (!res.ok) throw new Error("Image regeneration failed");
+      return res.json() as Promise<{ image?: string | null; imageError?: string | null; remix?: any }>;
+    },
+    onSuccess: (data) => {
+      setResultImage(data.image ?? data.remix?.imageUrl ?? null);
+      setImageError(data.imageError ?? null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (err: any) => {
+      Alert.alert("Image error", err.message || "Could not regenerate image");
+    },
+  });
+
   function handleGenerate() {
     if (inspirationIds.length < 2) {
       Alert.alert("Need at least 2 inspirations", "Go back and select more.");
@@ -106,6 +154,8 @@ export default function MergeScreen() {
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setResult(null);
+    setResultImage(null);
+    setImageError(null);
     setSaved(false);
     mergeMutation.mutate();
   }
@@ -166,6 +216,53 @@ export default function MergeScreen() {
           ))}
         </View>
 
+        {/* Cover image */}
+        <Text style={styles.sectionLabel}>Cover image</Text>
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            style={[styles.toggleChip, generateImage && styles.toggleChipActive]}
+            onPress={() => setGenerateImage((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.toggleChipText, generateImage && styles.toggleChipTextActive]}>
+              {generateImage ? "Generate image ON" : "Generate image OFF"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {generateImage && (
+          <>
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.toggleChip, useReferences && styles.toggleChipActive]}
+                onPress={() => setUseReferences((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.toggleChipText, useReferences && styles.toggleChipTextActive]}>
+                  {useReferences ? "Use post images as refs" : "No reference images"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.hintText}>
+              {refsAvailable > 0
+                ? `${refsAvailable} of ${selectedInspirations.length} sources have preview images.`
+                : "No preview images on selected sources — generation will be prompt-only."}
+            </Text>
+            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>
+              Image prompt <Text style={styles.optional}>(optional)</Text>
+            </Text>
+            <TextInput
+              style={styles.contextInput}
+              placeholder="e.g. cinematic tech blog hero, dark mode, minimal"
+              placeholderTextColor={colors.textTertiary}
+              value={imagePrompt}
+              onChangeText={setImagePrompt}
+              multiline
+              numberOfLines={2}
+              maxLength={500}
+            />
+          </>
+        )}
+
         {/* Context input */}
         <Text style={styles.sectionLabel}>Context <Text style={styles.optional}>(optional)</Text></Text>
         <TextInput
@@ -218,6 +315,25 @@ export default function MergeScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            {resultImage ? (
+              <Image source={{ uri: resultImage }} style={styles.resultImage} resizeMode="cover" />
+            ) : imageError ? (
+              <Text style={styles.imageErrorText}>Image: {imageError}</Text>
+            ) : null}
+            {generateImage && lastRemixId && (
+              <TouchableOpacity
+                style={styles.regenerateBtn}
+                onPress={() => regenerateImageMutation.mutate()}
+                disabled={regenerateImageMutation.isPending}
+                activeOpacity={0.7}
+              >
+                {regenerateImageMutation.isPending ? (
+                  <ActivityIndicator color={colors.accent} size="small" />
+                ) : (
+                  <Text style={styles.regenerateBtnText}>Regenerate image</Text>
+                )}
+              </TouchableOpacity>
+            )}
             <Text style={styles.resultText}>{result}</Text>
           </View>
         )}
@@ -253,6 +369,20 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   optional: { color: colors.textTertiary, textTransform: "none", letterSpacing: 0 },
+
+  toggleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+  toggleChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  toggleChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  toggleChipText: { ...typography.caption, color: colors.textSecondary, fontSize: 13 },
+  toggleChipTextActive: { color: "#fff", fontWeight: "600" },
+  hintText: { ...typography.caption, color: colors.textTertiary, marginBottom: 4 },
 
   warning: {
     ...typography.body,
@@ -364,5 +494,28 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   copyBtnText: { ...typography.caption, color: colors.accent, fontSize: 12 },
+  resultImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 12,
+    backgroundColor: colors.background,
+  },
+  imageErrorText: {
+    ...typography.caption,
+    color: colors.warning ?? "#F59E0B",
+    marginBottom: 8,
+  },
+  regenerateBtn: {
+    alignSelf: "flex-start",
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  regenerateBtnText: { ...typography.caption, color: colors.accent, fontSize: 12 },
   resultText: { ...typography.body, color: colors.textPrimary, lineHeight: 22 },
 });

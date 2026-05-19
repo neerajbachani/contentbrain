@@ -1,5 +1,6 @@
 import { runTrendJob } from "./trendJob";
 import { BOOTSTRAP_NICHES } from "../services/nicheData";
+import { logTrends } from "../services/trendsLogger";
 
 // Simple cron-like scheduler using setInterval (no external dep needed)
 // For production, swap with node-cron
@@ -13,6 +14,7 @@ export function startScheduler() {
   const apifyXEnabled =
     !!process.env.APIFY_API_TOKEN && process.env.APIFY_X_TRENDS_ENABLED !== "false";
 
+  logTrends("scheduler_bootstrap", { apifyX: apifyXEnabled });
   console.log(
     `[Scheduler] Running startup bootstrap fetch... (Apify X: ${apifyXEnabled ? "on" : "off"})`
   );
@@ -37,6 +39,7 @@ export function startScheduler() {
     async () => {
       const apifyX =
         !!process.env.APIFY_API_TOKEN && process.env.APIFY_X_TRENDS_ENABLED !== "false";
+      logTrends("scheduler_hourly", { apifyX });
       console.log(`[Scheduler] Running 60-min full trend job... (Apify X: ${apifyX ? "on" : "off"})`);
       await runTrendJob({ includeApify: apifyX, includeNewsData: true }).catch(console.error);
     },

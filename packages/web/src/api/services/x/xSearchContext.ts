@@ -35,6 +35,26 @@ function buildPrompt(input: {
     return `Use x_search to find the latest X posts (last 7 days) about: ${kw}. Related to: "${input.rawContent.slice(0, 200)}". Return 5-8 posts with URLs.`;
   }
 
+  if (input.intent === "trending_global") {
+    return `Use x_search to find what is currently trending on X right now (Explore / Trending tab), globally.
+
+Return exactly 3 distinct X post URLs with the full post text (not topic summaries).
+Only include posts that are already viral: prefer ≥1,000 likes OR ≥300 reposts OR ≥50,000 views.
+Exclude posts under 100 likes.
+For each post include: post URL, post text, author handle, and engagement (likes/reposts/views).`;
+  }
+
+  if (input.intent === "trending_niche") {
+    const kw = input.nicheKeywords?.slice(0, 3).join(" ") ?? input.rawContent.slice(0, 120);
+    return `Use x_search for viral X posts in the last 48 hours about: ${kw}.
+
+Return 5-7 distinct post URLs with full post text.
+Only posts with ≥500 likes OR ≥150 reposts OR ≥25,000 views.
+Exclude promotional threads and posts under 100 likes.
+Prefer original posts with media.
+For each post include: URL, text, author, and engagement metrics.`;
+  }
+
   const threadHint = parsed
     ? ` Also search discussion around tweet id ${parsed.tweetId}.`
     : "";
@@ -46,6 +66,24 @@ Key ideas: ${ideas}
 Tags: ${tags}
 
 Return real reply-style summaries and cite X post URLs. Focus on diverse perspectives (support, pushback, questions).`;
+}
+
+function xSearchToolConfig(intent: XContextIntent): Record<string, unknown> {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 2);
+
+  const base: Record<string, unknown> = {
+    type: "x_search",
+    from_date: from.toISOString().slice(0, 10),
+    to_date: to.toISOString().slice(0, 10),
+    enable_image_understanding: true,
+  };
+
+  if (intent === "trending_global" || intent === "trending_niche") {
+    return base;
+  }
+  return { type: "x_search" };
 }
 
 async function callXaiResponses(
@@ -68,7 +106,7 @@ async function callXaiResponses(
     body: JSON.stringify({
       model: XAI_MODEL,
       input: [{ role: "user", content: prompt }],
-      tools: [{ type: "x_search" }],
+      tools: [xSearchToolConfig(intent)],
       store: false,
     }),
   });
