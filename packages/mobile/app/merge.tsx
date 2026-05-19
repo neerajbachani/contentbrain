@@ -12,9 +12,10 @@ import {
   ArrowLeftIcon, SparkleIcon, CopyIcon, CheckIcon,
   XIcon, FloppyDiskIcon,
 } from "phosphor-react-native";
-import { colors } from "../constants/colors";
 import { typography } from "../constants/typography";
 import { api } from "../lib/api";
+import { useTheme, useThemedStyles } from "../theme";
+import type { ThemeColors } from "../theme/types";
 
 const OUTPUT_TYPES = [
   { id: "tweet_thread", label: "Tweet Thread" },
@@ -27,7 +28,187 @@ const OUTPUT_TYPES = [
 
 type OutputType = (typeof OUTPUT_TYPES)[number]["id"];
 
+function makeStyles(theme: ThemeColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.appBG },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    backBtn: { padding: 8 },
+    headerTitle: { ...typography.heading3, color: theme.text },
+    scroll: { flex: 1 },
+    scrollContent: { padding: 16 },
+
+    sectionLabel: {
+      ...typography.caption,
+      color: theme.textSupporting,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+      marginBottom: 8,
+      marginTop: 20,
+    },
+    optional: { color: theme.placeholderText, textTransform: "none", letterSpacing: 0 },
+
+    toggleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+    toggleChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.cardBG,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    toggleChipActive: { backgroundColor: theme.success, borderColor: theme.success },
+    toggleChipText: { ...typography.caption, color: theme.textSupporting, fontSize: 13 },
+    toggleChipTextActive: { color: "#fff", fontWeight: "600" },
+    hintText: { ...typography.caption, color: theme.placeholderText, marginBottom: 4 },
+
+    warning: {
+      ...typography.body,
+      color: theme.warning,
+      marginBottom: 8,
+    },
+
+    chipRow: { flexDirection: "row", marginBottom: 4 },
+    sourceChip: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      marginRight: 8,
+      maxWidth: 140,
+    },
+    sourceChipPlatform: {
+      ...typography.caption,
+      color: theme.placeholderText,
+      fontSize: 10,
+      marginBottom: 2,
+    },
+    sourceChipTitle: { ...typography.caption, color: theme.text, fontSize: 12 },
+
+    emptyText: { ...typography.body, color: theme.placeholderText, fontStyle: "italic" },
+
+    outputGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 4,
+    },
+    outputChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.cardBG,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    outputChipActive: {
+      backgroundColor: theme.success,
+      borderColor: theme.success,
+    },
+    outputChipText: { ...typography.caption, color: theme.textSupporting, fontSize: 13 },
+    outputChipTextActive: { color: "#fff", fontWeight: "600" },
+
+    contextInput: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      color: theme.text,
+      padding: 12,
+      minHeight: 80,
+      textAlignVertical: "top",
+      ...typography.body,
+      fontSize: 14,
+      marginBottom: 4,
+    },
+
+    generateBtn: {
+      backgroundColor: theme.success,
+      borderRadius: 12,
+      paddingVertical: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 24,
+      shadowColor: theme.success,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    generateBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
+    generateBtnText: { color: "#fff", ...typography.heading3, fontSize: 16 },
+
+    resultCard: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 16,
+      marginTop: 24,
+    },
+    resultHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    resultLabel: { ...typography.heading3, color: theme.text, fontSize: 15 },
+    resultActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+    savedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+    savedText: { ...typography.caption, color: theme.success, fontSize: 11 },
+    copyBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: theme.appBG,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    copyBtnText: { ...typography.caption, color: theme.success, fontSize: 12 },
+    resultImage: {
+      width: "100%",
+      height: 200,
+      borderRadius: 10,
+      marginBottom: 12,
+      backgroundColor: theme.appBG,
+    },
+    imageErrorText: {
+      ...typography.caption,
+      color: theme.warning,
+      marginBottom: 8,
+    },
+    regenerateBtn: {
+      alignSelf: "flex-start",
+      marginBottom: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.appBG,
+    },
+    regenerateBtnText: { ...typography.caption, color: theme.success, fontSize: 12 },
+    resultText: { ...typography.body, color: theme.text, lineHeight: 22 },
+  });
+}
+
 export default function MergeScreen() {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { ids } = useLocalSearchParams<{ ids: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -46,7 +227,6 @@ export default function MergeScreen() {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Grab inspirations from cache
   const { data: inspirations } = useQuery({
     queryKey: ["inspirations"],
     queryFn: async () => {
@@ -94,7 +274,7 @@ export default function MergeScreen() {
       setResultImage(data.image ?? data.remix?.imageUrl ?? null);
       setImageError(data.imageError ?? null);
       setLastRemixId(data.remix?.id ?? null);
-      setSaved(true); // auto-saved by API
+      setSaved(true);
       queryClient.invalidateQueries({ queryKey: ["remixes"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -165,7 +345,7 @@ export default function MergeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeftIcon size={20} color={colors.textPrimary} />
+          <ArrowLeftIcon size={20} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Merge Studio</Text>
         <View style={{ width: 36 }} />
@@ -199,25 +379,25 @@ export default function MergeScreen() {
           )}
         </ScrollView>
 
-        {/* Output type picker */}
-        <Text style={styles.sectionLabel}>Output Type</Text>
+        {/* Output type */}
+        <Text style={styles.sectionLabel}>Output type</Text>
         <View style={styles.outputGrid}>
-          {OUTPUT_TYPES.map((ot) => (
+          {OUTPUT_TYPES.map((t) => (
             <TouchableOpacity
-              key={ot.id}
-              style={[styles.outputChip, outputType === ot.id && styles.outputChipActive]}
-              onPress={() => setOutputType(ot.id)}
+              key={t.id}
+              style={[styles.outputChip, outputType === t.id && styles.outputChipActive]}
+              onPress={() => { setOutputType(t.id); Haptics.selectionAsync(); }}
               activeOpacity={0.7}
             >
-              <Text style={[styles.outputChipText, outputType === ot.id && styles.outputChipTextActive]}>
-                {ot.label}
+              <Text style={[styles.outputChipText, outputType === t.id && styles.outputChipTextActive]}>
+                {t.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Cover image */}
-        <Text style={styles.sectionLabel}>Cover image</Text>
+        {/* Image generation toggle */}
+        <Text style={styles.sectionLabel}>Image</Text>
         <View style={styles.toggleRow}>
           <TouchableOpacity
             style={[styles.toggleChip, generateImage && styles.toggleChipActive]}
@@ -253,7 +433,7 @@ export default function MergeScreen() {
             <TextInput
               style={styles.contextInput}
               placeholder="e.g. cinematic tech blog hero, dark mode, minimal"
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={theme.placeholderText}
               value={imagePrompt}
               onChangeText={setImagePrompt}
               multiline
@@ -268,7 +448,7 @@ export default function MergeScreen() {
         <TextInput
           style={styles.contextInput}
           placeholder="e.g. Make it funny and suitable for Gen Z audience"
-          placeholderTextColor={colors.textTertiary}
+          placeholderTextColor={theme.placeholderText}
           value={context}
           onChangeText={setContext}
           multiline
@@ -301,15 +481,15 @@ export default function MergeScreen() {
               <View style={styles.resultActions}>
                 {saved && (
                   <View style={styles.savedBadge}>
-                    <FloppyDiskIcon size={12} color={colors.accent} />
+                    <FloppyDiskIcon size={12} color={theme.success} />
                     <Text style={styles.savedText}>Saved</Text>
                   </View>
                 )}
                 <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.7}>
                   {copied ? (
-                    <CheckIcon size={14} color={colors.accent} weight="bold" />
+                    <CheckIcon size={14} color={theme.success} weight="bold" />
                   ) : (
-                    <CopyIcon size={14} color={colors.accent} />
+                    <CopyIcon size={14} color={theme.success} />
                   )}
                   <Text style={styles.copyBtnText}>{copied ? "Copied!" : "Copy All"}</Text>
                 </TouchableOpacity>
@@ -328,7 +508,7 @@ export default function MergeScreen() {
                 activeOpacity={0.7}
               >
                 {regenerateImageMutation.isPending ? (
-                  <ActivityIndicator color={colors.accent} size="small" />
+                  <ActivityIndicator color={theme.success} size="small" />
                 ) : (
                   <Text style={styles.regenerateBtnText}>Regenerate image</Text>
                 )}
@@ -343,179 +523,3 @@ export default function MergeScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backBtn: { padding: 8 },
-  headerTitle: { ...typography.heading3, color: colors.textPrimary },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16 },
-
-  sectionLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginTop: 20,
-  },
-  optional: { color: colors.textTertiary, textTransform: "none", letterSpacing: 0 },
-
-  toggleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
-  toggleChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  toggleChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  toggleChipText: { ...typography.caption, color: colors.textSecondary, fontSize: 13 },
-  toggleChipTextActive: { color: "#fff", fontWeight: "600" },
-  hintText: { ...typography.caption, color: colors.textTertiary, marginBottom: 4 },
-
-  warning: {
-    ...typography.body,
-    color: colors.warning ?? "#F59E0B",
-    marginBottom: 8,
-  },
-
-  chipRow: { flexDirection: "row", marginBottom: 4 },
-  sourceChip: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 8,
-    maxWidth: 140,
-  },
-  sourceChipPlatform: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    fontSize: 10,
-    marginBottom: 2,
-  },
-  sourceChipTitle: { ...typography.caption, color: colors.textPrimary, fontSize: 12 },
-
-  emptyText: { ...typography.body, color: colors.textTertiary, fontStyle: "italic" },
-
-  outputGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 4,
-  },
-  outputChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  outputChipActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  outputChipText: { ...typography.caption, color: colors.textSecondary, fontSize: 13 },
-  outputChipTextActive: { color: "#fff", fontWeight: "600" },
-
-  contextInput: {
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.textPrimary,
-    padding: 12,
-    minHeight: 80,
-    textAlignVertical: "top",
-    ...typography.body,
-    fontSize: 14,
-    marginBottom: 4,
-  },
-
-  generateBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 24,
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  generateBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
-  generateBtnText: { color: "#fff", ...typography.heading3, fontSize: 16 },
-
-  resultCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginTop: 24,
-  },
-  resultHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  resultLabel: { ...typography.heading3, color: colors.textPrimary, fontSize: 15 },
-  resultActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  savedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
-  savedText: { ...typography.caption, color: colors.accent, fontSize: 11 },
-  copyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  copyBtnText: { ...typography.caption, color: colors.accent, fontSize: 12 },
-  resultImage: {
-    width: "100%",
-    height: 200,
-    borderRadius: 10,
-    marginBottom: 12,
-    backgroundColor: colors.background,
-  },
-  imageErrorText: {
-    ...typography.caption,
-    color: colors.warning ?? "#F59E0B",
-    marginBottom: 8,
-  },
-  regenerateBtn: {
-    alignSelf: "flex-start",
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  regenerateBtnText: { ...typography.caption, color: colors.accent, fontSize: 12 },
-  resultText: { ...typography.body, color: colors.textPrimary, lineHeight: 22 },
-});

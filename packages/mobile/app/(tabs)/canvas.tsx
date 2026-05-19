@@ -7,7 +7,6 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../../constants/colors";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -17,6 +16,17 @@ import {
   GlobeIcon, TextTIcon, TrashIcon, ArrowsOutIcon, SparkleIcon,
   XIcon, CheckCircleIcon, YoutubeLogo,
 } from "phosphor-react-native";
+import { useTheme, useThemedStyles } from "../../theme";
+import type { ThemeColors } from "../../theme/types";
+
+// Platform-specific colors are brand constants — they do NOT change with theme
+const PLATFORM_COLORS = {
+  twitter:   "#1D9BF0",
+  reddit:    "#FF4500",
+  instagram: "#E1306C",
+  youtube:   "#FF0000",
+  news:      "#6366F1",
+} as const;
 
 const FILTERS = ["all", "tweet", "reel", "reddit", "blog", "text", "url"] as const;
 
@@ -29,19 +39,155 @@ const PLATFORMS = [
   { label: "Custom", value: "custom" },
 ];
 
-const PLATFORM_META: Record<string, { label: string; color: string }> = {
-  twitter: { label: "Twitter/X", color: colors.twitter },
-  x:       { label: "Twitter/X", color: colors.twitter },
-  reddit:  { label: "Reddit",    color: colors.reddit },
-  instagram: { label: "Instagram", color: colors.instagram },
-  youtube: { label: "YouTube",   color: colors.youtube },
-  news:    { label: "News",      color: colors.news },
-  blog:    { label: "Blog",      color: colors.news },
-  custom:  { label: "Custom",    color: colors.textTertiary },
-};
+function makeStyles(theme: ThemeColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.appBG },
+    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
+    headerTitle: { ...typography.displayMedium, color: theme.text },
+    addIconBtn: { backgroundColor: theme.success, width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+    filtersScroll: { flexGrow: 0 },
+    filtersContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+    filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBG },
+    filterChipActive: { backgroundColor: theme.success, borderColor: theme.success },
+    filterChipText: { color: theme.textSupporting, fontSize: 13, fontWeight: "500" },
+    filterChipTextActive: { color: theme.appBG, fontWeight: "700" },
+    centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+    emptyTitle: { ...typography.heading, color: theme.textSupporting },
+    emptyText: { ...typography.caption, color: theme.placeholderText, textAlign: "center" },
 
-function getPlatformMeta(platform: string) {
-  return PLATFORM_META[platform?.toLowerCase()] ?? { label: platform ?? "Custom", color: colors.textTertiary };
+    // List
+    list: { padding: 12, gap: 12, paddingBottom: 100 },
+
+    // Card base
+    card: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: "hidden",
+    },
+    cardNoImage: {
+      padding: 14,
+      gap: 10,
+    },
+
+    // Image card
+    imageContainer: {
+      width: "100%",
+      height: 200,
+      position: "relative",
+    },
+    cardImage: {
+      width: "100%",
+      height: "100%",
+      backgroundColor: theme.highlightBG,
+    },
+    platformBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 100,
+      borderWidth: 1,
+      backgroundColor: theme.appBG + "CC",
+    },
+    platformBadgeText: {
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    deleteOverlay: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: theme.appBG + "CC",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    selectedOverlay: {
+      position: "absolute",
+      top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: theme.success + "22",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardContent: {
+      padding: 14,
+      gap: 8,
+    },
+
+    // No-image card header
+    cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    platformRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    platformLabel: { fontSize: 12, fontWeight: "600" },
+    headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+
+    // Shared content
+    titleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+    cardTitle: { flex: 1, color: theme.text, fontSize: 14, fontWeight: "700", lineHeight: 20 },
+    cardSummary: { color: theme.textSupporting, fontSize: 13, lineHeight: 18 },
+
+    // Tags
+    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+    tag: { backgroundColor: theme.highlightBG, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
+    tagText: { color: theme.placeholderText, fontSize: 11 },
+
+    // Type badge
+    typeBadge: { backgroundColor: theme.highlightBG, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+    typeBadgeText: { color: theme.placeholderText, fontSize: 9, fontWeight: "700", letterSpacing: 0.5 },
+
+    // Actions
+    cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 },
+    remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: theme.success, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+    remixBtnFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: theme.success, paddingVertical: 10, borderRadius: 100, marginTop: 2 },
+    remixBtnText: { color: theme.appBG, fontSize: 13, fontWeight: "700" },
+
+    // Multi-select bar
+    selectBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: theme.highlightBG, borderTopWidth: 1, borderTopColor: theme.border, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    selectBarText: { color: theme.success, fontWeight: "700", fontSize: 15 },
+    selectBarActions: { flexDirection: "row", gap: 10, alignItems: "center" },
+    cancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+    cancelBtnText: { color: theme.textSupporting, fontSize: 14 },
+    mergeBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.success, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100 },
+    mergeBtnText: { color: theme.appBG, fontWeight: "700", fontSize: 14 },
+
+    // Modal
+    modalRoot: { flex: 1, backgroundColor: theme.cardBG },
+    modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: theme.border },
+    modalTitle: { ...typography.heading, color: theme.text },
+    modalBody: { padding: 20, gap: 16 },
+    modeToggle: { flexDirection: "row", backgroundColor: theme.highlightBG, borderRadius: 10, padding: 4, gap: 4 },
+    modeBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
+    modeBtnActive: { backgroundColor: theme.success },
+    modeBtnText: { color: theme.textSupporting, fontSize: 14, fontWeight: "500" },
+    modeBtnTextActive: { color: theme.appBG, fontWeight: "700" },
+    error: { color: theme.danger, fontSize: 13, backgroundColor: "#EF444420", padding: 10, borderRadius: 8 },
+    input: { backgroundColor: theme.highlightBG, color: theme.text, padding: 14, borderRadius: 12, fontSize: 15 },
+    textArea: { height: 120 },
+    label: { color: theme.textSupporting, fontSize: 13, fontWeight: "500" },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBG },
+    chipSelected: { backgroundColor: theme.success, borderColor: theme.success },
+    chipText: { color: theme.textSupporting, fontSize: 13 },
+    chipTextSelected: { color: theme.appBG, fontWeight: "700" },
+    addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.success, padding: 16, borderRadius: 100, marginTop: 8 },
+    addBtnText: { color: theme.appBG, fontWeight: "700", fontSize: 16 },
+  });
+}
+
+function getPlatformMeta(platform: string, placeholderColor: string) {
+  const p = platform?.toLowerCase();
+  const color = (PLATFORM_COLORS as Record<string, string>)[p] ?? placeholderColor;
+  const labelMap: Record<string, string> = {
+    twitter: "Twitter/X", x: "Twitter/X", reddit: "Reddit",
+    instagram: "Instagram", youtube: "YouTube", news: "News", blog: "News",
+  };
+  return { label: labelMap[p] ?? (platform ?? "Custom"), color };
 }
 
 function detectPlatformFromUrl(value: string): string | null {
@@ -54,7 +200,8 @@ function detectPlatformFromUrl(value: string): string | null {
 }
 
 function PlatformIcon({ platform, size = 14, color }: { platform: string; size?: number; color?: string }) {
-  const meta = getPlatformMeta(platform);
+  const theme = useTheme();
+  const meta = getPlatformMeta(platform, theme.placeholderText);
   const c = color ?? meta.color;
   const p = platform?.toLowerCase();
   const Icon = (p === "twitter" || p === "x") ? TwitterLogoIcon
@@ -65,7 +212,7 @@ function PlatformIcon({ platform, size = 14, color }: { platform: string; size?:
   return <Icon size={size} color={c} weight="fill" />;
 }
 
-function TypeBadge({ type }: { type: string }) {
+function TypeBadge({ type, styles }: { type: string; styles: ReturnType<typeof makeStyles> }) {
   if (!type || type === "text") return null;
   return (
     <View style={styles.typeBadge}>
@@ -75,52 +222,48 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 function InspirationCard({
-  item, isSelected, onPress, onLongPress, onRemix, onDelete,
+  item, isSelected, onPress, onLongPress, onRemix, onDelete, styles,
 }: any) {
+  const theme = useTheme();
   let tags: string[] = [];
   try { tags = JSON.parse(item.tags || "[]"); } catch {}
 
-  const meta = getPlatformMeta(item.sourcePlatform);
+  const meta = getPlatformMeta(item.sourcePlatform, theme.placeholderText);
   const hasImage = !!item.ogImage;
 
   if (hasImage) {
     return (
       <Pressable
-        style={[styles.card, isSelected && { borderColor: colors.accent, borderWidth: 2 }]}
+        style={[styles.card, isSelected && { borderColor: theme.success, borderWidth: 2 }]}
         onPress={onPress}
         onLongPress={onLongPress}
       >
-        {/* Image */}
         <View style={styles.imageContainer}>
           <Image
             source={{ uri: item.ogImage }}
             style={styles.cardImage}
             resizeMode="cover"
           />
-          {/* Platform badge over image */}
           <View style={[styles.platformBadge, { backgroundColor: meta.color + "22", borderColor: meta.color + "44" }]}>
             <PlatformIcon platform={item.sourcePlatform} size={12} />
             <Text style={[styles.platformBadgeText, { color: meta.color }]}>{meta.label}</Text>
           </View>
-          {/* Delete */}
           <TouchableOpacity style={styles.deleteOverlay} onPress={onDelete} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-            <TrashIcon size={14} color={colors.textTertiary} />
+            <TrashIcon size={14} color={theme.placeholderText} />
           </TouchableOpacity>
-          {/* Selected overlay */}
           {isSelected && (
             <View style={styles.selectedOverlay}>
-              <CheckCircleIcon size={28} color={colors.accent} weight="fill" />
+              <CheckCircleIcon size={28} color={theme.success} weight="fill" />
             </View>
           )}
         </View>
 
-        {/* Content */}
         <View style={styles.cardContent}>
           <View style={styles.titleRow}>
             <Text style={styles.cardTitle} numberOfLines={2}>
               {item.title || item.rawContent}
             </Text>
-            <TypeBadge type={item.type} />
+            <TypeBadge type={item.type} styles={styles} />
           </View>
 
           {item.summary ? (
@@ -138,7 +281,7 @@ function InspirationCard({
           )}
 
           <TouchableOpacity style={styles.remixBtnFull} onPress={onRemix}>
-            <SparkleIcon size={14} color={colors.background} weight="fill" />
+            <SparkleIcon size={14} color={theme.appBG} weight="fill" />
             <Text style={styles.remixBtnText}>Remix with AI</Text>
           </TouchableOpacity>
         </View>
@@ -146,29 +289,27 @@ function InspirationCard({
     );
   }
 
-  // No-image card — compact with left accent border
   return (
     <Pressable
       style={[
         styles.card,
         styles.cardNoImage,
-        { borderLeftColor: isSelected ? colors.accent : meta.color, borderLeftWidth: 4 },
-        isSelected && { borderColor: colors.accent, borderWidth: 2, borderLeftWidth: 4 },
+        { borderLeftColor: isSelected ? theme.success : meta.color, borderLeftWidth: 4 },
+        isSelected && { borderColor: theme.success, borderWidth: 2, borderLeftWidth: 4 },
       ]}
       onPress={onPress}
       onLongPress={onLongPress}
     >
-      {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.platformRow}>
           <PlatformIcon platform={item.sourcePlatform} size={14} />
           <Text style={[styles.platformLabel, { color: meta.color }]}>{meta.label}</Text>
-          <TypeBadge type={item.type} />
+          <TypeBadge type={item.type} styles={styles} />
         </View>
         <View style={styles.headerRight}>
-          {isSelected && <CheckCircleIcon size={16} color={colors.accent} weight="fill" />}
+          {isSelected && <CheckCircleIcon size={16} color={theme.success} weight="fill" />}
           <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-            <TrashIcon size={14} color={colors.textTertiary} />
+            <TrashIcon size={14} color={theme.placeholderText} />
           </TouchableOpacity>
         </View>
       </View>
@@ -193,7 +334,7 @@ function InspirationCard({
 
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
-          <SparkleIcon size={13} color={colors.background} weight="fill" />
+          <SparkleIcon size={13} color={theme.appBG} weight="fill" />
           <Text style={styles.remixBtnText}>Remix</Text>
         </TouchableOpacity>
       </View>
@@ -202,6 +343,8 @@ function InspirationCard({
 }
 
 function AddContentModal({ visible, onClose, onAdded }: any) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [mode, setMode] = useState<"url" | "text">("text");
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
@@ -268,13 +411,13 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: colors.surface }}
+        style={styles.modalRoot}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Content</Text>
           <TouchableOpacity onPress={onClose}>
-            <XIcon size={22} color={colors.textSecondary} />
+            <XIcon size={22} color={theme.textSupporting} />
           </TouchableOpacity>
         </View>
 
@@ -299,7 +442,7 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
             <TextInput
               style={styles.input}
               placeholder="https://..."
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={theme.placeholderText}
               value={url}
               onChangeText={setUrl}
               autoCapitalize="none"
@@ -310,7 +453,7 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Paste a tweet, caption, post..."
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={theme.placeholderText}
               value={text}
               onChangeText={setText}
               multiline
@@ -338,10 +481,10 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
 
           <TouchableOpacity style={styles.addBtn} onPress={handleAdd} disabled={loading}>
             {loading ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color={theme.appBG} />
             ) : (
               <>
-                <SparkleIcon size={18} color={colors.background} weight="fill" />
+                <SparkleIcon size={18} color={theme.appBG} weight="fill" />
                 <Text style={styles.addBtnText}>Add & Analyze with AI</Text>
               </>
             )}
@@ -353,6 +496,8 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
 }
 
 export default function CanvasScreen() {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const { selectedIds, filter, setFilter, toggleSelect, clearSelection } = useCanvasStore();
@@ -404,7 +549,7 @@ export default function CanvasScreen() {
           style={styles.addIconBtn}
           onPress={() => { setModalVisible(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <PlusIcon size={22} color={colors.background} weight="bold" />
+          <PlusIcon size={22} color={theme.appBG} weight="bold" />
         </TouchableOpacity>
       </View>
 
@@ -425,11 +570,11 @@ export default function CanvasScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.accent} />
+          <ActivityIndicator color={theme.success} />
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.centered}>
-          <TextTIcon size={48} color={colors.textTertiary} />
+          <TextTIcon size={48} color={theme.placeholderText} />
           <Text style={styles.emptyTitle}>No inspirations yet</Text>
           <Text style={styles.emptyText}>Tap + to add your first piece of content</Text>
         </View>
@@ -438,13 +583,14 @@ export default function CanvasScreen() {
           data={filtered}
           keyExtractor={(item: any) => item.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={colors.accent} />}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={theme.success} />}
           renderItem={({ item }: any) => {
             const isSelected = selectedIds.includes(item.id);
             return (
               <InspirationCard
                 item={item}
                 isSelected={isSelected}
+                styles={styles}
                 onPress={() => {
                   if (selectedIds.length > 0) {
                     toggleSelect(item.id);
@@ -472,7 +618,7 @@ export default function CanvasScreen() {
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.mergeBtn} onPress={handleMerge}>
-              <ArrowsOutIcon size={16} color={colors.background} weight="bold" />
+              <ArrowsOutIcon size={16} color={theme.appBG} weight="bold" />
               <Text style={styles.mergeBtnText}>Merge →</Text>
             </TouchableOpacity>
           </View>
@@ -487,142 +633,3 @@ export default function CanvasScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
-  headerTitle: { ...typography.displayMedium, color: colors.textPrimary },
-  addIconBtn: { backgroundColor: colors.accent, width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  filtersScroll: { flexGrow: 0 },
-  filtersContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "500" },
-  filterChipTextActive: { color: colors.background, fontWeight: "700" },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  emptyTitle: { ...typography.heading, color: colors.textSecondary },
-  emptyText: { ...typography.caption, color: colors.textTertiary, textAlign: "center" },
-
-  // List
-  list: { padding: 12, gap: 12, paddingBottom: 100 },
-
-  // Card base
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  cardNoImage: {
-    padding: 14,
-    gap: 10,
-  },
-
-  // Image card
-  imageContainer: {
-    width: "100%",
-    height: 200,
-    position: "relative",
-  },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: colors.surfaceElevated,
-  },
-  platformBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 100,
-    borderWidth: 1,
-    backgroundColor: colors.background + "CC",
-  },
-  platformBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  deleteOverlay: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: colors.background + "CC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  selectedOverlay: {
-    position: "absolute",
-    inset: 0,
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: colors.accent + "22",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardContent: {
-    padding: 14,
-    gap: 8,
-  },
-
-  // No-image card header
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  platformRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  platformLabel: { fontSize: 12, fontWeight: "600" },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-
-  // Shared content
-  titleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
-  cardTitle: { flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: "700", lineHeight: 20 },
-  cardSummary: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
-
-  // Tags
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  tag: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
-  tagText: { color: colors.textTertiary, fontSize: 11 },
-
-  // Type badge
-  typeBadge: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
-  typeBadgeText: { color: colors.textTertiary, fontSize: 9, fontWeight: "700", letterSpacing: 0.5 },
-
-  // Actions
-  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 },
-  remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
-  remixBtnFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.accent, paddingVertical: 10, borderRadius: 100, marginTop: 2 },
-  remixBtnText: { color: colors.background, fontSize: 13, fontWeight: "700" },
-
-  // Multi-select bar
-  selectBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.surfaceElevated, borderTopWidth: 1, borderTopColor: colors.border, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  selectBarText: { color: colors.accent, fontWeight: "700", fontSize: 15 },
-  selectBarActions: { flexDirection: "row", gap: 10, alignItems: "center" },
-  cancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
-  cancelBtnText: { color: colors.textSecondary, fontSize: 14 },
-  mergeBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100 },
-  mergeBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
-
-  // Modal
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
-  modalTitle: { ...typography.heading, color: colors.textPrimary },
-  modalBody: { padding: 20, gap: 16 },
-  modeToggle: { flexDirection: "row", backgroundColor: colors.surfaceElevated, borderRadius: 10, padding: 4, gap: 4 },
-  modeBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-  modeBtnActive: { backgroundColor: colors.accent },
-  modeBtnText: { color: colors.textSecondary, fontSize: 14, fontWeight: "500" },
-  modeBtnTextActive: { color: colors.background, fontWeight: "700" },
-  error: { color: colors.danger, fontSize: 13, backgroundColor: "#EF444420", padding: 10, borderRadius: 8 },
-  input: { backgroundColor: colors.surfaceElevated, color: colors.textPrimary, padding: 14, borderRadius: 12, fontSize: 15 },
-  textArea: { height: 120 },
-  label: { color: colors.textSecondary, fontSize: 13, fontWeight: "500" },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.textSecondary, fontSize: 13 },
-  chipTextSelected: { color: colors.background, fontWeight: "700" },
-  addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.accent, padding: 16, borderRadius: 100, marginTop: 8 },
-  addBtnText: { color: colors.background, fontWeight: "700", fontSize: 16 },
-});

@@ -5,7 +5,6 @@ import {
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../../constants/colors";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import { useRouter } from "expo-router";
@@ -15,11 +14,45 @@ import {
   BookmarkSimpleIcon, SparkleIcon, TrashIcon, CopyIcon,
   GlobeIcon,
 } from "phosphor-react-native";
+import { useTheme, useThemedStyles } from "../../theme";
+import type { ThemeColors } from "../../theme/types";
 
 const TABS = ["Inspirations", "Remixes"] as const;
 type Tab = (typeof TABS)[number];
 
+function makeStyles(theme: ThemeColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.appBG },
+    header: { paddingHorizontal: 16, paddingVertical: 12 },
+    headerTitle: { ...typography.displayMedium, color: theme.text },
+    tabs: { flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 8 },
+    tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: theme.border },
+    tabActive: { backgroundColor: theme.success, borderColor: theme.success },
+    tabText: { color: theme.textSupporting, fontSize: 14, fontWeight: "500" },
+    tabTextActive: { color: theme.appBG, fontWeight: "700" },
+    centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+    emptyTitle: { ...typography.heading, color: theme.textSupporting },
+    emptyText: { ...typography.caption, color: theme.placeholderText, textAlign: "center", paddingHorizontal: 32 },
+    list: { padding: 16, gap: 12 },
+    row: { backgroundColor: theme.cardBG, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 8 },
+    rowLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+    rowPlatform: { color: theme.placeholderText, fontSize: 11, fontWeight: "500" },
+    rowTitle: { color: theme.text, fontSize: 14, fontWeight: "600", lineHeight: 20 },
+    rowSummary: { color: theme.textSupporting, fontSize: 12 },
+    tagRow: { flexDirection: "row", gap: 6 },
+    tag: { backgroundColor: theme.highlightBG, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
+    tagText: { color: theme.placeholderText, fontSize: 10 },
+    rowActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+    actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: theme.success, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
+    actionBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" },
+    badge: { backgroundColor: theme.highlightBG, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+    badgeText: { color: theme.textSupporting, fontSize: 11, fontWeight: "600" },
+  });
+}
+
 function InspirationRow({ item, onDelete }: any) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   let tags: string[] = [];
   try { tags = JSON.parse(item.tags || "[]"); } catch {}
   const router = useRouter();
@@ -27,7 +60,7 @@ function InspirationRow({ item, onDelete }: any) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
-        <GlobeIcon size={14} color={colors.textTertiary} />
+        <GlobeIcon size={14} color={theme.placeholderText} />
         <Text style={styles.rowPlatform}>{item.sourcePlatform}</Text>
       </View>
       <Text style={styles.rowTitle} numberOfLines={2}>{item.title || item.rawContent}</Text>
@@ -44,11 +77,11 @@ function InspirationRow({ item, onDelete }: any) {
           style={styles.actionBtn}
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/remix/${item.id}`); }}
         >
-          <SparkleIcon size={14} color={colors.accent} />
+          <SparkleIcon size={14} color={theme.success} />
           <Text style={styles.actionBtnText}>Remix</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onDelete}>
-          <TrashIcon size={16} color={colors.textTertiary} />
+          <TrashIcon size={16} color={theme.placeholderText} />
         </TouchableOpacity>
       </View>
     </View>
@@ -56,6 +89,8 @@ function InspirationRow({ item, onDelete }: any) {
 }
 
 function RemixRow({ item, onDelete }: any) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   let variations: any[] = [];
   try { variations = JSON.parse(item.variations || "[]"); } catch {}
   const content = variations[0]?.content || item.outputContent;
@@ -76,11 +111,11 @@ function RemixRow({ item, onDelete }: any) {
       <Text style={styles.rowTitle} numberOfLines={3}>{content}</Text>
       <View style={styles.rowActions}>
         <TouchableOpacity style={styles.actionBtn} onPress={copyAll}>
-          <CopyIcon size={14} color={colors.accent} />
+          <CopyIcon size={14} color={theme.success} />
           <Text style={styles.actionBtnText}>Copy</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onDelete}>
-          <TrashIcon size={16} color={colors.textTertiary} />
+          <TrashIcon size={16} color={theme.placeholderText} />
         </TouchableOpacity>
       </View>
     </View>
@@ -88,6 +123,8 @@ function RemixRow({ item, onDelete }: any) {
 }
 
 export default function LibraryScreen() {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [activeTab, setActiveTab] = useState<Tab>("Inspirations");
   const qc = useQueryClient();
 
@@ -156,11 +193,11 @@ export default function LibraryScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.accent} />
+          <ActivityIndicator color={theme.success} />
         </View>
       ) : data.length === 0 ? (
         <View style={styles.centered}>
-          <BookmarkSimpleIcon size={48} color={colors.textTertiary} />
+          <BookmarkSimpleIcon size={48} color={theme.placeholderText} />
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyText}>
             {activeTab === "Inspirations" ? "Add content from the Canvas tab" : "Generate remixes from your inspirations"}
@@ -183,31 +220,3 @@ export default function LibraryScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  header: { paddingHorizontal: 16, paddingVertical: 12 },
-  headerTitle: { ...typography.displayMedium, color: colors.textPrimary },
-  tabs: { flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 8 },
-  tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
-  tabActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  tabText: { color: colors.textSecondary, fontSize: 14, fontWeight: "500" },
-  tabTextActive: { color: colors.background, fontWeight: "700" },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  emptyTitle: { ...typography.heading, color: colors.textSecondary },
-  emptyText: { ...typography.caption, color: colors.textTertiary, textAlign: "center", paddingHorizontal: 32 },
-  list: { padding: 16, gap: 12 },
-  row: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 8 },
-  rowLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  rowPlatform: { color: colors.textTertiary, fontSize: 11, fontWeight: "500" },
-  rowTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: "600", lineHeight: 20 },
-  rowSummary: { color: colors.textSecondary, fontSize: 12 },
-  tagRow: { flexDirection: "row", gap: 6 },
-  tag: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
-  tagText: { color: colors.textTertiary, fontSize: 10 },
-  rowActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
-  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  actionBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-  badge: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  badgeText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
-});

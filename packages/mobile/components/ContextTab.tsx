@@ -12,7 +12,7 @@ import { getToken } from "../lib/auth";
 import { api } from "../lib/api";
 import { getApiBase } from "../lib/apiBase";
 import { useTheme, useThemedStyles } from "../theme";
-import { colors } from "../constants/colors";
+import { colors as paletteColors } from "../theme/colors";
 import { variables } from "../theme/variables";
 import { Text } from "./ui";
 import type { ThemeColors } from "../theme/types";
@@ -120,7 +120,7 @@ function makeContextStyles(theme: ThemeColors) {
     scoreBadge: { flexDirection: "row" as const, alignItems: "center" as const, gap: 3 },
     scoreText: { color: theme.placeholderText, fontSize: 11 },
     cardBody: { color: theme.text, fontSize: variables.fontSizeNormal, lineHeight: 20 },
-    expandText: { color: colors.green600, fontSize: 11, marginTop: 6, fontWeight: "600" as const },
+    expandText: { color: paletteColors.green600, fontSize: 11, marginTop: 6, fontWeight: "600" as const },
     cardActions: { flexDirection: "row" as const, gap: variables.spacing2, marginTop: 2 },
     fuelBtn: {
       flexDirection: "row" as const,
@@ -185,7 +185,7 @@ function ScoreBadge({
     const hint = mode === "reddit" ? "Related angle" : mode === "xai" || mode === "apify" ? "Live" : "AI-surfaced";
     return (
       <View style={styles.scoreBadge}>
-        <SparkleIcon size={10} color={colors.green600} />
+        <SparkleIcon size={10} color={paletteColors.green600} />
         <Text style={styles.scoreText}>{hint}</Text>
       </View>
     );
@@ -371,7 +371,7 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {banner && (
         <View style={styles.aiBanner}>
-          <SparkleIcon size={12} color={colors.green600} />
+          <SparkleIcon size={12} color={paletteColors.green600} />
           <Text style={styles.aiBannerText}>{banner}</Text>
         </View>
       )}

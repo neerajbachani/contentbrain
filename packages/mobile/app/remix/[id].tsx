@@ -6,7 +6,6 @@ import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../../constants/colors";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import * as Haptics from "expo-haptics";
@@ -15,6 +14,9 @@ import {
   ArrowLeftIcon, SparkleIcon, CopyIcon, ArrowClockwiseIcon, XIcon, PlusIcon,
 } from "phosphor-react-native";
 import ContextTab from "../../components/ContextTab";
+import { useTheme, useThemedStyles } from "../../theme";
+import type { ThemeColors } from "../../theme/types";
+import { colors as paletteColors } from "../../theme/colors";
 
 const OUTPUT_TYPES = [
   { label: "Tweet", value: "tweet" },
@@ -44,7 +46,168 @@ const STYLES = [
 
 const TAKE_MAX_CHARS = 240;
 
-function VariationCard({ variation, index }: { variation: any; index: number }) {
+function makeStyles(theme: ThemeColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.appBG },
+    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
+    headerTitle: { ...typography.heading, color: theme.text },
+
+    tabBar: {
+      flexDirection: "row",
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      marginHorizontal: 16,
+      marginBottom: 4,
+    },
+    tab: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      marginRight: 20,
+      borderBottomWidth: 2,
+      borderBottomColor: "transparent",
+    },
+    tabActive: { borderBottomColor: theme.success },
+    tabText: { color: theme.placeholderText, fontSize: 14, fontWeight: "600" },
+    tabTextActive: { color: theme.success },
+    fuelBadge: {
+      backgroundColor: theme.success,
+      borderRadius: 10,
+      minWidth: 16,
+      height: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 4,
+    },
+    fuelBadgeText: { color: theme.appBG, fontSize: 10, fontWeight: "700" },
+
+    content: { padding: 16, gap: 16 },
+    sourceCard: { backgroundColor: theme.cardBG, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 8 },
+    sourceLabel: { color: theme.placeholderText, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+    sourceTitle: { color: theme.text, fontSize: 15, fontWeight: "600", lineHeight: 21 },
+    styleBadge: { backgroundColor: theme.highlightBG, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
+    styleBadgeText: { color: theme.textSupporting, fontSize: 11 },
+
+    researchCard: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 14,
+      gap: 8,
+    },
+    researchTitle: { color: theme.text, fontWeight: "700", fontSize: 15 },
+    researchHint: { color: theme.placeholderText, fontSize: 12, lineHeight: 17 },
+    researchBtn: {
+      backgroundColor: theme.success,
+      paddingVertical: 11,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+    researchBtnDisabled: { opacity: 0.5 },
+    researchBtnText: { color: theme.appBG, fontWeight: "700", fontSize: 14 },
+    researchError: { color: theme.danger, fontSize: 12 },
+
+    fuelBar: {
+      backgroundColor: theme.highlightBG,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.success + "33",
+      padding: 12,
+      gap: 8,
+    },
+    fuelBarHeader: { flexDirection: "row", alignItems: "center", gap: 5 },
+    fuelBarLabel: { color: paletteColors.green600, fontSize: 12, fontWeight: "700", flex: 1 },
+    clearAllBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    clearAllBtnText: { color: theme.textSupporting, fontSize: 11, fontWeight: "600" },
+    fuelHelpText: { color: theme.placeholderText, fontSize: 11, marginTop: -2 },
+    fuelChips: { gap: 8 },
+    fuelChip: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      backgroundColor: theme.cardBG,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    fuelChipIndex: {
+      color: paletteColors.green600,
+      fontSize: 11,
+      fontWeight: "700",
+      marginTop: 2,
+    },
+    fuelChipText: { color: theme.textSupporting, fontSize: 12, flex: 1, lineHeight: 17 },
+
+    takeCard: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: "hidden",
+    },
+    takeCollapsed: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      padding: 14,
+    },
+    takeCollapsedText: { flex: 1, gap: 2 },
+    takeCollapsedTitle: { color: theme.text, fontSize: 14, fontWeight: "600" },
+    takeCollapsedHint: { color: theme.placeholderText, fontSize: 11 },
+    takePreview: { color: theme.textSupporting, fontSize: 13, flex: 1 },
+    takeExpanded: { padding: 14, gap: 8 },
+    takeExpandedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    takeExpandedLabel: { color: theme.textSupporting, fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+    takeInput: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 20,
+      minHeight: 88,
+      maxHeight: 120,
+      padding: 0,
+    },
+    takeCounter: { color: theme.placeholderText, fontSize: 11, textAlign: "right" },
+
+    error: { color: theme.danger, fontSize: 13, backgroundColor: "#EF444420", padding: 10, borderRadius: 8 },
+    sectionLabel: { color: theme.textSupporting, fontSize: 13, fontWeight: "600" },
+    chipRow: { gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBG },
+    chipActive: { backgroundColor: theme.success, borderColor: theme.success },
+    chipText: { color: theme.textSupporting, fontSize: 13, fontWeight: "500" },
+    chipTextActive: { color: theme.appBG, fontWeight: "700" },
+    generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: theme.success, padding: 16, borderRadius: 14 },
+    generateBtnLoading: { opacity: 0.7 },
+    generateBtnText: { color: theme.appBG, fontWeight: "700", fontSize: 16 },
+    results: { gap: 12 },
+    resultsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    resultsTitle: { ...typography.heading, color: theme.text },
+    regenBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
+    regenBtnText: { color: theme.success, fontSize: 14, fontWeight: "600" },
+    variationCard: { backgroundColor: theme.cardBG, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 10 },
+    variationHeader: { gap: 2 },
+    variationLabel: { color: theme.text, fontSize: 14, fontWeight: "700" },
+    variationSubLabel: { color: theme.textSupporting, fontSize: 12 },
+    variationContent: { color: theme.text, fontSize: 15, lineHeight: 22 },
+    whyBox: { backgroundColor: theme.highlightBG, borderRadius: 10, padding: 10, gap: 2 },
+    whyLabel: { color: theme.placeholderText, fontSize: 11, fontWeight: "600" },
+    whyText: { color: theme.textSupporting, fontSize: 13 },
+    copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: theme.success, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, alignSelf: "flex-start" },
+    copyBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" },
+  });
+}
+
+function VariationCard({ variation, index, styles, theme }: { variation: any; index: number; styles: ReturnType<typeof makeStyles>; theme: ThemeColors }) {
   const labels = ["🔥 Variation 1", "⚡ Variation 2 — Different Angle", "✨ Variation 3 — Unique Twist"];
 
   async function copy() {
@@ -69,7 +232,7 @@ function VariationCard({ variation, index }: { variation: any; index: number }) 
       )}
 
       <TouchableOpacity style={styles.copyBtn} onPress={copy}>
-        <CopyIcon size={14} color={colors.accent} />
+        <CopyIcon size={14} color={theme.success} />
         <Text style={styles.copyBtnText}>Copy</Text>
       </TouchableOpacity>
     </View>
@@ -77,6 +240,8 @@ function VariationCard({ variation, index }: { variation: any; index: number }) 
 }
 
 export default function RemixStudioScreen() {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<"studio" | "context">("studio");
@@ -222,7 +387,7 @@ export default function RemixStudioScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <ArrowLeftIcon size={24} color={colors.textPrimary} />
+          <ArrowLeftIcon size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Remix Studio</Text>
         <View style={{ width: 24 }} />
@@ -236,7 +401,7 @@ export default function RemixStudioScreen() {
         >
           <SparkleIcon
             size={14}
-            color={activeTab === "studio" ? colors.accent : colors.textTertiary}
+            color={activeTab === "studio" ? theme.success : theme.placeholderText}
             weight={activeTab === "studio" ? "fill" : "regular"}
           />
           <Text style={[styles.tabText, activeTab === "studio" && styles.tabTextActive]}>
@@ -272,7 +437,7 @@ export default function RemixStudioScreen() {
         >
           {/* Original content */}
           {isLoading ? (
-            <ActivityIndicator color={colors.accent} />
+            <ActivityIndicator color={theme.success} />
           ) : inspiration ? (
             <View style={styles.sourceCard}>
               <Text style={styles.sourceLabel}>Original · {inspiration.sourcePlatform}</Text>
@@ -297,7 +462,7 @@ export default function RemixStudioScreen() {
                 disabled={researchLoading || !isPremium}
               >
                 {researchLoading ? (
-                  <ActivityIndicator color={colors.background} size="small" />
+                  <ActivityIndicator color={theme.appBG} size="small" />
                 ) : (
                   <Text style={styles.researchBtnText}>
                     {isPremium ? "Scan X for angles" : "Premium required"}
@@ -314,7 +479,7 @@ export default function RemixStudioScreen() {
           {fuelItems.length > 0 && (
             <View style={styles.fuelBar}>
               <View style={styles.fuelBarHeader}>
-                <SparkleIcon size={12} color={colors.accent} weight="fill" />
+                <SparkleIcon size={12} color={theme.success} weight="fill" />
                 <Text style={styles.fuelBarLabel}>
                   {fuelItems.length} fuel item{fuelItems.length > 1 ? "s" : ""} added
                 </Text>
@@ -331,7 +496,7 @@ export default function RemixStudioScreen() {
                       {item}
                     </Text>
                     <TouchableOpacity onPress={() => removeFuel(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <XIcon size={11} color={colors.textTertiary} />
+                      <XIcon size={11} color={theme.placeholderText} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -347,7 +512,7 @@ export default function RemixStudioScreen() {
                 onPress={() => setTakeExpanded(true)}
                 activeOpacity={0.8}
               >
-                <PlusIcon size={14} color={colors.accent} />
+                <PlusIcon size={14} color={theme.success} />
                 {trimmedTake ? (
                   <Text style={styles.takePreview} numberOfLines={1}>
                     {trimmedTake.slice(0, 60)}{trimmedTake.length > 60 ? "…" : ""}
@@ -364,7 +529,7 @@ export default function RemixStudioScreen() {
                 <View style={styles.takeExpandedHeader}>
                   <Text style={styles.takeExpandedLabel}>Your take</Text>
                   <TouchableOpacity onPress={clearTake} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <XIcon size={16} color={colors.textTertiary} />
+                    <XIcon size={16} color={theme.placeholderText} />
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -372,7 +537,7 @@ export default function RemixStudioScreen() {
                   value={userTake}
                   onChangeText={(t) => setUserTake(t.slice(0, TAKE_MAX_CHARS))}
                   placeholder="What's your angle on this? e.g. I disagree because..."
-                  placeholderTextColor={colors.textTertiary}
+                  placeholderTextColor={theme.placeholderText}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -437,12 +602,12 @@ export default function RemixStudioScreen() {
           >
             {generateMutation.isPending ? (
               <>
-                <ActivityIndicator color={colors.background} />
+                <ActivityIndicator color={theme.appBG} />
                 <Text style={styles.generateBtnText}>Generating...</Text>
               </>
             ) : (
               <>
-                <SparkleIcon size={18} color={colors.background} weight="fill" />
+                <SparkleIcon size={18} color={theme.appBG} weight="fill" />
                 <Text style={styles.generateBtnText}>{getGenerateLabel()}</Text>
               </>
             )}
@@ -458,11 +623,13 @@ export default function RemixStudioScreen() {
                   onPress={() => generateMutation.mutate()}
                   disabled={generateMutation.isPending}
                 >
-                  <ArrowClockwiseIcon size={16} color={colors.accent} />
+                  <ArrowClockwiseIcon size={16} color={theme.success} />
                   <Text style={styles.regenBtnText}>Regenerate</Text>
                 </TouchableOpacity>
               </View>
-              {variations.map((v, i) => <VariationCard key={i} variation={v} index={i} />)}
+              {variations.map((v, i) => (
+                <VariationCard key={i} variation={v} index={i} styles={styles} theme={theme} />
+              ))}
             </View>
           )}
         </ScrollView>
@@ -470,162 +637,3 @@ export default function RemixStudioScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
-  headerTitle: { ...typography.heading, color: colors.textPrimary },
-
-  tabBar: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginHorizontal: 16,
-    marginBottom: 4,
-  },
-  tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    marginRight: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabActive: { borderBottomColor: colors.accent },
-  tabText: { color: colors.textTertiary, fontSize: 14, fontWeight: "600" },
-  tabTextActive: { color: colors.accent },
-  fuelBadge: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    minWidth: 16,
-    height: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  fuelBadgeText: { color: colors.background, fontSize: 10, fontWeight: "700" },
-
-  content: { padding: 16, gap: 16 },
-  sourceCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 8 },
-  sourceLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
-  sourceTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: "600", lineHeight: 21 },
-  styleBadge: { backgroundColor: colors.surfaceElevated, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
-  styleBadgeText: { color: colors.textSecondary, fontSize: 11 },
-
-  researchCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 8,
-  },
-  researchTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 15 },
-  researchHint: { color: colors.textTertiary, fontSize: 12, lineHeight: 17 },
-  researchBtn: {
-    backgroundColor: colors.accent,
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  researchBtnDisabled: { opacity: 0.5 },
-  researchBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
-  researchError: { color: colors.danger, fontSize: 12 },
-
-  fuelBar: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.accent + "33",
-    padding: 12,
-    gap: 8,
-  },
-  fuelBarHeader: { flexDirection: "row", alignItems: "center", gap: 5 },
-  fuelBarLabel: { color: colors.accentDim, fontSize: 12, fontWeight: "700", flex: 1 },
-  clearAllBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  clearAllBtnText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
-  fuelHelpText: { color: colors.textTertiary, fontSize: 11, marginTop: -2 },
-  fuelChips: { gap: 8 },
-  fuelChip: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  fuelChipIndex: {
-    color: colors.accentDim,
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  fuelChipText: { color: colors.textSecondary, fontSize: 12, flex: 1, lineHeight: 17 },
-
-  takeCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  takeCollapsed: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 14,
-  },
-  takeCollapsedText: { flex: 1, gap: 2 },
-  takeCollapsedTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  takeCollapsedHint: { color: colors.textTertiary, fontSize: 11 },
-  takePreview: { color: colors.textSecondary, fontSize: 13, flex: 1 },
-  takeExpanded: { padding: 14, gap: 8 },
-  takeExpandedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  takeExpandedLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
-  takeInput: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 88,
-    maxHeight: 120,
-    padding: 0,
-  },
-  takeCounter: { color: colors.textTertiary, fontSize: 11, textAlign: "right" },
-
-  error: { color: colors.danger, fontSize: 13, backgroundColor: "#EF444420", padding: 10, borderRadius: 8 },
-  sectionLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: "600" },
-  chipRow: { gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "500" },
-  chipTextActive: { color: colors.background, fontWeight: "700" },
-  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.accent, padding: 16, borderRadius: 14 },
-  generateBtnLoading: { opacity: 0.7 },
-  generateBtnText: { color: colors.background, fontWeight: "700", fontSize: 16 },
-  results: { gap: 12 },
-  resultsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  resultsTitle: { ...typography.heading, color: colors.textPrimary },
-  regenBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
-  regenBtnText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
-  variationCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
-  variationHeader: { gap: 2 },
-  variationLabel: { color: colors.textPrimary, fontSize: 14, fontWeight: "700" },
-  variationSubLabel: { color: colors.textSecondary, fontSize: 12 },
-  variationContent: { color: colors.textPrimary, fontSize: 15, lineHeight: 22 },
-  whyBox: { backgroundColor: colors.surfaceElevated, borderRadius: 10, padding: 10, gap: 2 },
-  whyLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: "600" },
-  whyText: { color: colors.textSecondary, fontSize: 13 },
-  copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, alignSelf: "flex-start" },
-  copyBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-});
