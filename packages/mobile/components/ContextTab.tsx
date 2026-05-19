@@ -64,7 +64,7 @@ function contextBannerText(mode: ContextMode): string | null {
 interface Props {
   inspirationId: string;
   onAddFuel: (text: string) => void;
-  onSaveToCanvas: (text: string, platform: string) => void;
+  onSaveToCanvas: (text: string, platform: string, sourceUrl?: string) => void;
 }
 
 function SkeletonCard() {
@@ -107,7 +107,7 @@ function ContextCard({
   type: "comment" | "post";
   mode: ContextMode;
   onAddFuel: (text: string) => void;
-  onSaveToCanvas: (text: string, platform: string) => void;
+  onSaveToCanvas: (text: string, platform: string, sourceUrl?: string) => void;
 }) {
   const isComment = type === "comment";
   const comment = item as ContextComment;
@@ -129,7 +129,8 @@ function ContextCard({
   }
 
   function handleSave() {
-    onSaveToCanvas(fuelText, canvasPlatform);
+    const postUrl = !isComment ? post.url : undefined;
+    onSaveToCanvas(fuelText, canvasPlatform, postUrl);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
@@ -203,7 +204,7 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     }, [loadContext])
   );
 
-  async function handleSaveToCanvas(text: string, platform: string) {
+  async function handleSaveToCanvas(text: string, platform: string, sourceUrl?: string) {
     const key = text.slice(0, 40);
     if (savedIds.has(key)) return;
     setSavedIds((prev) => new Set(prev).add(key));
@@ -212,6 +213,7 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
         json: {
           rawContent: text,
           sourcePlatform: platform,
+          sourceUrl: sourceUrl ?? null,
           type: "text",
         },
       });

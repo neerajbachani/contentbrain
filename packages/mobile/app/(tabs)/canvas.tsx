@@ -12,11 +12,10 @@ import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import { useCanvasStore } from "../../store/canvasStore";
 import * as Haptics from "expo-haptics";
-import * as Clipboard from "expo-clipboard";
 import {
   PlusIcon, TwitterLogoIcon, RedditLogoIcon, InstagramLogoIcon,
   GlobeIcon, TextTIcon, TrashIcon, ArrowsOutIcon, SparkleIcon,
-  XIcon,
+  XIcon, CheckCircleIcon, YoutubeLogo,
 } from "phosphor-react-native";
 
 const FILTERS = ["all", "tweet", "reel", "reddit", "blog", "text", "url"] as const;
@@ -30,6 +29,21 @@ const PLATFORMS = [
   { label: "Custom", value: "custom" },
 ];
 
+const PLATFORM_META: Record<string, { label: string; color: string }> = {
+  twitter: { label: "Twitter/X", color: colors.twitter },
+  x:       { label: "Twitter/X", color: colors.twitter },
+  reddit:  { label: "Reddit",    color: colors.reddit },
+  instagram: { label: "Instagram", color: colors.instagram },
+  youtube: { label: "YouTube",   color: colors.youtube },
+  news:    { label: "News",      color: colors.news },
+  blog:    { label: "Blog",      color: colors.news },
+  custom:  { label: "Custom",    color: colors.textTertiary },
+};
+
+function getPlatformMeta(platform: string) {
+  return PLATFORM_META[platform?.toLowerCase()] ?? { label: platform ?? "Custom", color: colors.textTertiary };
+}
+
 function detectPlatformFromUrl(value: string): string | null {
   const normalized = value.toLowerCase();
   if (normalized.includes("twitter.com") || normalized.includes("x.com")) return "twitter";
@@ -39,13 +53,25 @@ function detectPlatformFromUrl(value: string): string | null {
   return null;
 }
 
-function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number }) {
-  const c = { twitter: colors.twitter, reddit: colors.reddit, instagram: colors.instagram }[platform] ?? colors.textSecondary;
-  const Icon = platform === "twitter" ? TwitterLogoIcon
-    : platform === "reddit" ? RedditLogoIcon
-    : platform === "instagram" ? InstagramLogoIcon
+function PlatformIcon({ platform, size = 14, color }: { platform: string; size?: number; color?: string }) {
+  const meta = getPlatformMeta(platform);
+  const c = color ?? meta.color;
+  const p = platform?.toLowerCase();
+  const Icon = (p === "twitter" || p === "x") ? TwitterLogoIcon
+    : p === "reddit" ? RedditLogoIcon
+    : p === "instagram" ? InstagramLogoIcon
+    : p === "youtube" ? YoutubeLogo
     : GlobeIcon;
   return <Icon size={size} color={c} weight="fill" />;
+}
+
+function TypeBadge({ type }: { type: string }) {
+  if (!type || type === "text") return null;
+  return (
+    <View style={styles.typeBadge}>
+      <Text style={styles.typeBadgeText}>{type.toUpperCase()}</Text>
+    </View>
+  );
 }
 
 function InspirationCard({
@@ -54,27 +80,100 @@ function InspirationCard({
   let tags: string[] = [];
   try { tags = JSON.parse(item.tags || "[]"); } catch {}
 
+  const meta = getPlatformMeta(item.sourcePlatform);
+  const hasImage = !!item.ogImage;
+
+  if (hasImage) {
+    return (
+      <Pressable
+        style={[styles.card, isSelected && { borderColor: colors.accent, borderWidth: 2 }]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+      >
+        {/* Image */}
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.ogImage }}
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+          {/* Platform badge over image */}
+          <View style={[styles.platformBadge, { backgroundColor: meta.color + "22", borderColor: meta.color + "44" }]}>
+            <PlatformIcon platform={item.sourcePlatform} size={12} />
+            <Text style={[styles.platformBadgeText, { color: meta.color }]}>{meta.label}</Text>
+          </View>
+          {/* Delete */}
+          <TouchableOpacity style={styles.deleteOverlay} onPress={onDelete} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+            <TrashIcon size={14} color={colors.textTertiary} />
+          </TouchableOpacity>
+          {/* Selected overlay */}
+          {isSelected && (
+            <View style={styles.selectedOverlay}>
+              <CheckCircleIcon size={28} color={colors.accent} weight="fill" />
+            </View>
+          )}
+        </View>
+
+        {/* Content */}
+        <View style={styles.cardContent}>
+          <View style={styles.titleRow}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {item.title || item.rawContent}
+            </Text>
+            <TypeBadge type={item.type} />
+          </View>
+
+          {item.summary ? (
+            <Text style={styles.cardSummary} numberOfLines={2}>{item.summary}</Text>
+          ) : null}
+
+          {tags.length > 0 && (
+            <View style={styles.tagRow}>
+              {tags.slice(0, 3).map((t: string) => (
+                <View key={t} style={styles.tag}>
+                  <Text style={styles.tagText}>#{t}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.remixBtnFull} onPress={onRemix}>
+            <SparkleIcon size={14} color={colors.background} weight="fill" />
+            <Text style={styles.remixBtnText}>Remix with AI</Text>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    );
+  }
+
+  // No-image card — compact with left accent border
   return (
     <Pressable
-      style={[styles.card, isSelected && styles.cardSelected]}
+      style={[
+        styles.card,
+        styles.cardNoImage,
+        { borderLeftColor: isSelected ? colors.accent : meta.color, borderLeftWidth: 4 },
+        isSelected && { borderColor: colors.accent, borderWidth: 2, borderLeftWidth: 4 },
+      ]}
       onPress={onPress}
       onLongPress={onLongPress}
     >
-      {item.ogImage ? (
-        <Image source={{ uri: item.ogImage }} style={styles.cardImage} resizeMode="cover" />
-      ) : null}
-
+      {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.platformRow}>
-          <PlatformIcon platform={item.sourcePlatform} />
-          <Text style={styles.platformLabel}>{item.sourcePlatform}</Text>
+          <PlatformIcon platform={item.sourcePlatform} size={14} />
+          <Text style={[styles.platformLabel, { color: meta.color }]}>{meta.label}</Text>
+          <TypeBadge type={item.type} />
         </View>
-        <TouchableOpacity onPress={onDelete}>
-          <TrashIcon size={16} color={colors.textTertiary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {isSelected && <CheckCircleIcon size={16} color={colors.accent} weight="fill" />}
+          <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+            <TrashIcon size={14} color={colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={styles.cardTitle} numberOfLines={2}>
+      <Text style={styles.cardTitle} numberOfLines={3}>
         {item.title || item.rawContent}
       </Text>
 
@@ -83,27 +182,20 @@ function InspirationCard({
       ) : null}
 
       {tags.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.tagRow}>
-            {tags.slice(0, 4).map((t: string) => (
-              <View key={t} style={styles.tag}>
-                <Text style={styles.tagText}>#{t}</Text>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+        <View style={styles.tagRow}>
+          {tags.slice(0, 3).map((t: string) => (
+            <View key={t} style={styles.tag}>
+              <Text style={styles.tagText}>#{t}</Text>
+            </View>
+          ))}
+        </View>
       )}
 
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
-          <SparkleIcon size={14} color={colors.background} weight="fill" />
+          <SparkleIcon size={13} color={colors.background} weight="fill" />
           <Text style={styles.remixBtnText}>Remix</Text>
         </TouchableOpacity>
-        {isSelected && (
-          <View style={styles.selectedBadge}>
-            <Text style={styles.selectedBadgeText}>✓ Selected</Text>
-          </View>
-        )}
       </View>
     </Pressable>
   );
@@ -122,9 +214,7 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
   useEffect(() => {
     if (mode !== "url") return;
     const detected = detectPlatformFromUrl(url);
-    if (detected) {
-      setPlatform(detected);
-    }
+    if (detected) setPlatform(detected);
   }, [url, mode]);
 
   async function handleAdd() {
@@ -189,7 +279,6 @@ function AddContentModal({ visible, onClose, onAdded }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-          {/* Mode toggle */}
           <View style={styles.modeToggle}>
             {(["url", "text"] as const).map((m) => (
               <TouchableOpacity
@@ -286,7 +375,9 @@ export default function CanvasScreen() {
   });
 
   const inspirations = data ?? [];
-  const filtered = filter === "all" ? inspirations : inspirations.filter((i: any) => i.type === filter || i.sourcePlatform === filter);
+  const filtered = filter === "all"
+    ? inspirations
+    : inspirations.filter((i: any) => i.type === filter || i.sourcePlatform === filter);
 
   function handleDelete(id: string) {
     Alert.alert("Delete", "Remove this inspiration?", [
@@ -346,9 +437,7 @@ export default function CanvasScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item: any) => item.id}
-          numColumns={2}
-          contentContainerStyle={styles.grid}
-          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={colors.accent} />}
           renderItem={({ item }: any) => {
             const isSelected = selectedIds.includes(item.id);
@@ -413,24 +502,102 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   emptyTitle: { ...typography.heading, color: colors.textSecondary },
   emptyText: { ...typography.caption, color: colors.textTertiary, textAlign: "center" },
-  grid: { padding: 12 },
-  row: { gap: 12, marginBottom: 12 },
-  card: { flex: 1, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 },
-  cardImage: { width: "100%", height: 110, borderRadius: 12, backgroundColor: colors.surfaceElevated },
-  cardSelected: { borderColor: colors.accent, borderWidth: 2 },
+
+  // List
+  list: { padding: 12, gap: 12, paddingBottom: 100 },
+
+  // Card base
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  cardNoImage: {
+    padding: 14,
+    gap: 10,
+  },
+
+  // Image card
+  imageContainer: {
+    width: "100%",
+    height: 200,
+    position: "relative",
+  },
+  cardImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: colors.surfaceElevated,
+  },
+  platformBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 100,
+    borderWidth: 1,
+    backgroundColor: colors.background + "CC",
+  },
+  platformBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  deleteOverlay: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: colors.background + "CC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectedOverlay: {
+    position: "absolute",
+    inset: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.accent + "22",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardContent: {
+    padding: 14,
+    gap: 8,
+  },
+
+  // No-image card header
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  platformRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  platformLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: "500" },
-  cardTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: "600", lineHeight: 18 },
-  cardSummary: { color: colors.textSecondary, fontSize: 12, lineHeight: 16 },
-  tagRow: { flexDirection: "row", gap: 6 },
+  platformRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  platformLabel: { fontSize: 12, fontWeight: "600" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+
+  // Shared content
+  titleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+  cardTitle: { flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: "700", lineHeight: 20 },
+  cardSummary: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+
+  // Tags
+  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   tag: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
-  tagText: { color: colors.textTertiary, fontSize: 10 },
-  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
-  remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  remixBtnText: { color: colors.background, fontSize: 12, fontWeight: "700" },
-  selectedBadge: { backgroundColor: colors.accentDim + "33", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  selectedBadgeText: { color: colors.accent, fontSize: 11, fontWeight: "600" },
+  tagText: { color: colors.textTertiary, fontSize: 11 },
+
+  // Type badge
+  typeBadge: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+  typeBadgeText: { color: colors.textTertiary, fontSize: 9, fontWeight: "700", letterSpacing: 0.5 },
+
+  // Actions
+  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 },
+  remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
+  remixBtnFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.accent, paddingVertical: 10, borderRadius: 10, marginTop: 2 },
+  remixBtnText: { color: colors.background, fontSize: 13, fontWeight: "700" },
+
+  // Multi-select bar
   selectBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.surfaceElevated, borderTopWidth: 1, borderTopColor: colors.border, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   selectBarText: { color: colors.accent, fontWeight: "700", fontSize: 15 },
   selectBarActions: { flexDirection: "row", gap: 10, alignItems: "center" },
@@ -438,6 +605,7 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: colors.textSecondary, fontSize: 14 },
   mergeBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   mergeBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
+
   // Modal
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalTitle: { ...typography.heading, color: colors.textPrimary },

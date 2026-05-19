@@ -13,6 +13,7 @@ import { isXPlatform } from "../services/x/xUrl";
 import type { XDataSource } from "../services/x/types";
 import { logXContext } from "../services/x/logger";
 import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
+import { getLinkPreview } from "../services/linkPreview/ogScraper";
 
 export const inspirationsRoute = new Hono()
   .get("/", requireAuth, async (c) => {
@@ -30,6 +31,16 @@ export const inspirationsRoute = new Hono()
     let { rawContent, sourceUrl, sourcePlatform, type, title, ogImage } = body;
 
     if (!rawContent) return c.json({ message: "rawContent required" }, 400);
+
+    // Auto-fetch OG image for X/Twitter URLs when client didn't provide one
+    if (!ogImage && sourceUrl && typeof sourceUrl === "string" &&
+        isXPlatform(sourcePlatform ?? "", sourceUrl)) {
+      try {
+        const preview = await getLinkPreview(sourceUrl);
+        if (preview.imageUrl) ogImage = preview.imageUrl;
+        if (!title && preview.title) title = preview.title;
+      } catch { /* non-fatal */ }
+    }
 
     const existing = await db
       .select()
