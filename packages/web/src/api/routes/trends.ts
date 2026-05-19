@@ -5,6 +5,7 @@ import { eq, desc, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { memCache } from "../cache/memCache";
 import { runTrendJob } from "../jobs/trendJob";
+import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
 
 export const trendsRoute = new Hono()
   // GET /trends?niche=fitness,tech&source=all&limit=20
@@ -32,12 +33,15 @@ export const trendsRoute = new Hono()
 
     // Check rate limits (only for non-cached requests)
     if (
-      profile?.plan === "free" &&
+      !hasPremiumAccess(profile?.plan) &&
       profile?.lastResetDate === today &&
-      (profile?.trendCount ?? 0) >= 5
+      (profile?.trendCount ?? 0) >= FREE_LIMITS.dailyTrendFetches
     ) {
       return c.json(
-        { message: "Daily trend limit reached. Upgrade to Premium.", limitReached: true },
+        {
+          message: `Daily trend limit reached (${FREE_LIMITS.dailyTrendFetches}/day). Upgrade to Premium.`,
+          limitReached: true,
+        },
         403
       );
     }
@@ -146,12 +150,13 @@ export const trendsRoute = new Hono()
       .where(eq(schema.userProfiles.userId, user.id))
       .get();
 
-    if (profile?.plan !== "premium") {
+    if (!hasPremiumAccess(profile?.plan)) {
       return c.json({ error: "Manual refresh is a Premium feature" }, 403);
     }
 
     memCache.set(THROTTLE_KEY, Date.now(), 1800);
-    runTrendJob({ includeNewsData: true }).catch(console.error);
+    const includeApify = process.env.APIFY_X_TRENDS_ENABLED !== "false";
+    runTrendJob({ includeNewsData: true, includeApify }).catch(console.error);
 
     return c.json({ message: "Refresh started — new trends will appear in ~30 seconds" }, 200);
   });

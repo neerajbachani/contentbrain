@@ -1,15 +1,12 @@
 import { createAuthClient } from "better-auth/react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import Constants from "expo-constants";
+import { getApiBase } from "./apiBase";
 
 const isWeb = Platform.OS === "web";
 const TOKEN_KEY = "bearer_token";
 
-const baseURL =
-  Constants.expoConfig?.extra?.apiUrl ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://localhost:4200";
+const baseURL = getApiBase();
 
 export function getToken(): string {
   try {

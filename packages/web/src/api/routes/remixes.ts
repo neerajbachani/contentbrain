@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { remixContent } from "./ai";
 import { randomUUID } from "crypto";
+import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
 
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -45,8 +46,14 @@ export const remixesRoute = new Hono()
       profile = { ...profile, remixCount: 0, mergeCount: 0, trendCount: 0, lastResetDate: today };
     }
 
-    if (profile?.plan === "free" && (profile?.remixCount ?? 0) >= 5) {
-      return c.json({ message: "Daily remix limit reached. Upgrade to Premium.", limitReached: true }, 403);
+    if (!hasPremiumAccess(profile?.plan) && (profile?.remixCount ?? 0) >= FREE_LIMITS.dailyRemixes) {
+      return c.json(
+        {
+          message: `Daily remix limit reached (${FREE_LIMITS.dailyRemixes}/day). Upgrade to Premium.`,
+          limitReached: true,
+        },
+        403
+      );
     }
 
     // Get the inspiration

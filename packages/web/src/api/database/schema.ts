@@ -7,6 +7,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   userId: text("user_id").notNull().unique(),
   niche: text("niche").notNull().default("[]"), // JSON array
   plan: text("plan").notNull().default("free"), // 'free' | 'premium'
+  xDataSource: text("x_data_source").notNull().default("auto"), // 'auto' | 'xai' | 'apify'
   remixCount: integer("remix_count").notNull().default(0),
   mergeCount: integer("merge_count").notNull().default(0),
   trendCount: integer("trend_count").notNull().default(0),
@@ -72,6 +73,34 @@ export const canvases = sqliteTable("canvases", {
   inspirationIds: text("inspiration_ids").notNull().default("[]"),
   remixIds: text("remix_ids").notNull().default("[]"),
   updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const userXaiCredentials = sqliteTable("user_xai_credentials", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  accessTokenEncrypted: text("access_token_encrypted").notNull(),
+  refreshTokenEncrypted: text("refresh_token_encrypted"),
+  expiresAt: integer("expires_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const xContextCache = sqliteTable("x_context_cache", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  inspirationId: text("inspiration_id"),
+  intent: text("intent").notNull(), // 'context' | 'enrich' | 'research'
+  cacheKey: text("cache_key").notNull().unique(),
+  mode: text("mode").notNull(), // 'xai' | 'apify' | 'ai'
+  payloadJson: text("payload_json").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
 });

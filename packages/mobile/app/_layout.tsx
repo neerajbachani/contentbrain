@@ -4,17 +4,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
-import Constants from "expo-constants";
 import { getToken } from "../lib/auth";
+import { getApiBase } from "../lib/apiBase";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
 });
-
-const API_BASE: string =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://localhost:5173";
 
 function logAuth(message: string, extra?: unknown) {
   if (extra !== undefined) {
@@ -25,8 +20,14 @@ function logAuth(message: string, extra?: unknown) {
 }
 
 function AuthGate() {
+  const API_BASE = getApiBase();
+
+  useEffect(() => {
+    logAuth("resolved API_BASE", { API_BASE });
+  }, [API_BASE]);
+
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["session-check"],
+    queryKey: ["session-check", API_BASE],
     queryFn: async () => {
       const token = getToken();
       const targetUrl = `${API_BASE}/api/auth/get-session`;
@@ -75,14 +76,20 @@ function AuthGate() {
     });
     if (isPending) return;
 
-    if (isError) {
-      logAuth("session check error; skipping auth redirect for now");
-      return;
-    }
-
     const inAuth = segments[0] === "(auth)";
     const inTabs = segments[0] === "(tabs)";
     const inStack = segments[0] === "remix" || segments[0] === "merge" || segments[0] === "onboarding";
+
+    if (isError) {
+      if (hasToken && !inTabs && !inStack) {
+        logAuth("session check failed but token exists -> /(tabs)/canvas");
+        router.replace("/(tabs)/canvas");
+      } else if (!hasToken && !inAuth) {
+        logAuth("session check failed, no token -> /(auth)/login");
+        router.replace("/(auth)/login");
+      }
+      return;
+    }
 
     if (!session && !inAuth && !hasToken) {
       logAuth("redirect -> /(auth)/login");
@@ -96,7 +103,7 @@ function AuthGate() {
   return (
     <>
       <Slot />
-      {isPending ? (
+      {isPending || (isError && !segments[0]) ? (
         <View style={styles.splash}>
           <ActivityIndicator size="large" color="#C8FF00" />
         </View>

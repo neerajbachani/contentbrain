@@ -5,6 +5,7 @@ import { eq, inArray, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { mergeContent } from "./ai";
 import { randomUUID } from "crypto";
+import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
 
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -36,8 +37,14 @@ export const mergeRoute = new Hono()
       profile = { ...profile, remixCount: 0, mergeCount: 0, trendCount: 0, lastResetDate: today };
     }
 
-    if (profile?.plan === "free" && (profile?.mergeCount ?? 0) >= 2) {
-      return c.json({ message: "Daily merge limit reached. Upgrade to Premium.", limitReached: true }, 403);
+    if (!hasPremiumAccess(profile?.plan) && (profile?.mergeCount ?? 0) >= FREE_LIMITS.dailyMerges) {
+      return c.json(
+        {
+          message: `Daily merge limit reached (${FREE_LIMITS.dailyMerges}/day). Upgrade to Premium.`,
+          limitReached: true,
+        },
+        403
+      );
     }
 
     const sources = await db

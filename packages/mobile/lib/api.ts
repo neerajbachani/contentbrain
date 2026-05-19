@@ -1,12 +1,9 @@
 import { hc } from "hono/client";
-import Constants from "expo-constants";
 import type { AppType } from "@template/web";
 import { getToken } from "./auth";
+import { getApiBase } from "./apiBase";
 
-const baseUrl =
-  Constants.expoConfig?.extra?.apiUrl ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://localhost:4200";
+const baseUrl = getApiBase();
 
 const client = hc<AppType>(baseUrl!, {
   headers: () => {

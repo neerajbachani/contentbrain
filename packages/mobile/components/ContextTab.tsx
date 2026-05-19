@@ -1,9 +1,9 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from "react-native";
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import {
   LightningIcon, BookmarkSimpleIcon, ArrowUpIcon, ChatCircleIcon,
@@ -12,11 +12,7 @@ import {
 import { colors } from "../constants/colors";
 import { getToken } from "../lib/auth";
 import { api } from "../lib/api";
-
-const BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://localhost:4200";
+import { getApiBase } from "../lib/apiBase";
 
 interface ContextComment {
   author: string;
@@ -33,10 +29,36 @@ interface ContextPost {
   summary?: string;
 }
 
+type ContextMode = "reddit" | "x" | "xai" | "apify" | "ai";
+
+interface ContextDebug {
+  attempted?: string[];
+  errors?: string[];
+  fallbackReason?: "premium_required" | "daily_limit" | "all_live_sources_failed" | string;
+}
+
 interface ContextData {
-  mode: "reddit" | "x" | "ai";
+  mode: ContextMode;
   comments: ContextComment[];
   relatedPosts: ContextPost[];
+  debug?: ContextDebug;
+  message?: string;
+  error?: string;
+}
+
+function contextBannerText(mode: ContextMode): string | null {
+  switch (mode) {
+    case "xai":
+      return "Live from X (Grok) · your subscription";
+    case "apify":
+      return "From X (Apify) · real posts";
+    case "x":
+      return "AI-surfaced perspectives · premium required for live X";
+    case "ai":
+      return "Simulated perspectives · live X unavailable";
+    default:
+      return null;
+  }
 }
 
 interface Props {
@@ -56,9 +78,9 @@ function SkeletonCard() {
   );
 }
 
-function ScoreBadge({ score, mode }: { score: number; mode: string }) {
+function ScoreBadge({ score, mode }: { score: number; mode: ContextMode }) {
   if (score <= 0) {
-    const hint = mode === "x" ? "AI-surfaced" : "Related angle";
+    const hint = mode === "reddit" ? "Related angle" : mode === "xai" || mode === "apify" ? "Live" : "AI-surfaced";
     return (
       <View style={styles.scoreBadge}>
         <SparkleIcon size={10} color={colors.accentDim} />
@@ -83,7 +105,7 @@ function ContextCard({
 }: {
   item: ContextComment | ContextPost;
   type: "comment" | "post";
-  mode: string;
+  mode: ContextMode;
   onAddFuel: (text: string) => void;
   onSaveToCanvas: (text: string, platform: string) => void;
 }) {
@@ -95,7 +117,9 @@ function ContextCard({
   const body = isComment ? comment.body : (post.summary ?? "");
   const score = isComment ? comment.score : post.score;
   const fuelText = isComment ? comment.body : `${post.title}${post.summary ? `\n\n${post.summary}` : ""}`;
-  const canvasPlatform = isComment ? "reddit" : (post.platform ?? "custom");
+  const canvasPlatform = isComment
+    ? (mode === "reddit" ? "reddit" : "x")
+    : (post.platform ?? "custom");
   const [expanded, setExpanded] = useState(false);
   const showExpand = isComment && body.length > 180;
 
@@ -150,28 +174,34 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const qc = useQueryClient();
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const token = getToken();
-        const res = await fetch(`${BASE_URL}/api/inspirations/${inspirationId}/context`, {
-          headers: { Authorization: token ?? "" },
-        });
-        if (!res.ok) throw new Error(`${res.status}`);
-        const json: ContextData = await res.json();
-        if (!cancelled) setData(json);
-      } catch (err: any) {
-        if (!cancelled) setError("Could not load context. Try again.");
-      } finally {
-        if (!cancelled) setLoading(false);
+  const loadContext = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const token = getToken();
+      const base = getApiBase();
+      const res = await fetch(`${base}/api/inspirations/${inspirationId}/context`, {
+        headers: { Authorization: token ?? "" },
+      });
+      const json = (await res.json()) as ContextData;
+      if (!res.ok) {
+        const msg = json.message ?? json.error ?? `HTTP ${res.status}`;
+        throw new Error(msg);
       }
+      setData(json);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not load context";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-    load();
-    return () => { cancelled = true; };
   }, [inspirationId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadContext();
+    }, [loadContext])
+  );
 
   async function handleSaveToCanvas(text: string, platform: string) {
     const key = text.slice(0, 40);
@@ -223,18 +253,38 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     );
   }
 
-  const commentsLabel = data.mode === "reddit" ? "Top Comments" : "Community Angles";
-  const postsLabel = data.mode === "reddit" ? "Related Posts" : "Related Angles";
-  const isAISynthesized = data.mode !== "reddit";
+  const isReddit = data.mode === "reddit";
+  const commentsLabel = isReddit ? "Top Comments" : "Community Angles";
+  const postsLabel = isReddit ? "Related Posts" : "Related Angles";
+  const banner = contextBannerText(data.mode);
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {isAISynthesized && (
+      {banner && (
         <View style={styles.aiBanner}>
           <SparkleIcon size={12} color={colors.accentDim} />
-          <Text style={styles.aiBannerText}>
-            {data.mode === "x" ? "AI-surfaced perspectives · no Twitter API" : "AI-generated related angles"}
+          <Text style={styles.aiBannerText}>{banner}</Text>
+        </View>
+      )}
+
+      {data.debug?.errors && data.debug.errors.length > 0 && (
+        <View style={styles.debugBanner}>
+          <Text style={styles.debugTitle}>
+            {data.debug.fallbackReason === "premium_required"
+              ? "Premium required for live X"
+              : data.mode === "ai" || data.mode === "x"
+                ? "Live X unavailable — showing fallback"
+                : "Live X diagnostics"}
           </Text>
+          {data.debug.errors.slice(0, 4).map((e, i) => (
+            <Text key={i} style={styles.debugText}>• {e}</Text>
+          ))}
+          {data.debug.attempted && data.debug.attempted.length > 0 && (
+            <Text style={styles.debugHint}>
+              Tried: {data.debug.attempted.join(" → ")}
+            </Text>
+          )}
+          <Text style={styles.debugHint}>Check API terminal for [XContext] logs</Text>
         </View>
       )}
 
@@ -296,6 +346,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   aiBannerText: { color: colors.textTertiary, fontSize: 11, flex: 1 },
+
+  debugBanner: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugTitle: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
+  debugText: { color: colors.textTertiary, fontSize: 10, lineHeight: 14 },
+  debugHint: { color: colors.textTertiary, fontSize: 10, marginTop: 4, fontStyle: "italic" },
 
   sectionHeader: {
     flexDirection: "row",

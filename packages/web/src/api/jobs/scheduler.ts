@@ -10,11 +10,16 @@ export function startScheduler() {
   if (schedulerStarted) return;
   schedulerStarted = true;
 
-  console.log("[Scheduler] Running startup bootstrap fetch...");
+  const apifyXEnabled =
+    !!process.env.APIFY_API_TOKEN && process.env.APIFY_X_TRENDS_ENABLED !== "false";
+
+  console.log(
+    `[Scheduler] Running startup bootstrap fetch... (Apify X: ${apifyXEnabled ? "on" : "off"})`
+  );
   runTrendJob({
     niches: BOOTSTRAP_NICHES,
     includeNewsData: true,
-    includeApify: false,
+    includeApify: apifyXEnabled,
     maxItemsPerPlatform: 10,
   }).catch(console.error);
 
@@ -30,8 +35,10 @@ export function startScheduler() {
   // Full job (Reddit + NewsData + RSS) every 60 minutes
   setInterval(
     async () => {
-      console.log("[Scheduler] Running 60-min full trend job...");
-      await runTrendJob({ includeApify: false, includeNewsData: true }).catch(console.error);
+      const apifyX =
+        !!process.env.APIFY_API_TOKEN && process.env.APIFY_X_TRENDS_ENABLED !== "false";
+      console.log(`[Scheduler] Running 60-min full trend job... (Apify X: ${apifyX ? "on" : "off"})`);
+      await runTrendJob({ includeApify: apifyX, includeNewsData: true }).catch(console.error);
     },
     60 * 60 * 1000
   );

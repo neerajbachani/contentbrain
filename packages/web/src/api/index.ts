@@ -8,6 +8,8 @@ import { mergeRoute } from "./routes/merge";
 import { trendsRoute } from "./routes/trends";
 import { scrapeRoute } from "./routes/scrape";
 import { usersRoute } from "./routes/users";
+import { integrationsRoute } from "./routes/integrations";
+import { xRoute } from "./routes/x";
 import { startScheduler } from "./jobs/scheduler";
 
 // Start background scheduler (safe to call multiple times — idempotent)
@@ -24,7 +26,9 @@ const app = new Hono()
   .route("/merge", mergeRoute)
   .route("/trends", trendsRoute)
   .route("/scrape", scrapeRoute)
-  .route("/users", usersRoute);
+  .route("/users", usersRoute)
+  .route("/integrations", integrationsRoute)
+  .route("/x", xRoute);
 
 export type AppType = typeof app;
 export default app;

@@ -1,5 +1,5 @@
 import { fetchRedditTrends } from "../services/reddit/redditScraper";
-import { fetchXTrends } from "../services/apify/xScraper";
+import { fetchApifyXTrendFallback, fetchXTrends } from "../services/apify/xScraper";
 import { fetchNewsDataTrends } from "../services/news/newsDataScraper";
 import { fetchGoogleRssTrends } from "../services/news/googleRss";
 import { aggregateTrends, TrendItem } from "../services/normalizer";
@@ -45,13 +45,26 @@ export async function runTrendJob(options: TrendJobOptions = {}): Promise<number
       fetchGoogleRssTrends(niches),
     ]);
 
+    let xData = cap(x.status === "fulfilled" ? x.value : []);
+
+    if (includeApify && !googleRssOnly && xData.length < 5) {
+      const fallback = await fetchApifyXTrendFallback(5);
+      const seen = new Set(xData.map((t) => t.url).filter(Boolean));
+      for (const item of fallback) {
+        if (item.url && seen.has(item.url)) continue;
+        if (item.url) seen.add(item.url);
+        xData.push(item);
+      }
+      xData = cap(xData);
+    }
+
     const redditData   = cap(reddit.status    === "fulfilled" ? reddit.value    : []);
-    const xData        = cap(x.status         === "fulfilled" ? x.value         : []);
     const newsdataData = cap(newsdata.status   === "fulfilled" ? newsdata.value  : []);
     const googleData   = cap(googleRss.status  === "fulfilled" ? googleRss.value : []);
 
+    const xStored = xData.filter((t) => t.source === "x").length;
     console.log(
-      `[TrendJob][${jobMode}] Fetched: Reddit=${redditData.length} X=${xData.length} News=${newsdataData.length} RSS=${googleData.length}`
+      `[TrendJob][${jobMode}] Fetched: Reddit=${redditData.length} X=${xData.length} (x_platform=${xStored}) News=${newsdataData.length} RSS=${googleData.length}`
     );
 
     const aggregated = aggregateTrends(redditData, xData, newsdataData, googleData);

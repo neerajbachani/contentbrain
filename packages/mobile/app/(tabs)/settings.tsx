@@ -1,8 +1,9 @@
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, TextInput,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
 import { typography } from "../../constants/typography";
@@ -14,6 +15,12 @@ import {
   UserIcon, CrownIcon, SignOutIcon, BrainIcon, ArrowRightIcon,
 } from "phosphor-react-native";
 
+const X_SOURCE_OPTIONS = [
+  { value: "auto", label: "Auto", hint: "Grok if connected, else Apify" },
+  { value: "xai", label: "Grok", hint: "Your X subscription" },
+  { value: "apify", label: "Apify", hint: "App credits" },
+] as const;
+
 const NICHE_LABELS: Record<string, string> = {
   tech: "Tech", finance: "Finance", fitness: "Fitness", beauty: "Beauty",
   food: "Food", gaming: "Gaming", travel: "Travel", fashion: "Fashion",
@@ -23,6 +30,9 @@ const NICHE_LABELS: Record<string, string> = {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
+  const [grokToken, setGrokToken] = useState("");
+  const [connecting, setConnecting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -51,7 +61,63 @@ export default function SettingsScreen() {
   const profile = data?.profile;
   let niches: string[] = [];
   try { niches = JSON.parse(profile?.niche || "[]"); } catch {}
-  const isPremium = profile?.plan === "premium";
+  const limits = (data as { limits?: { inspirations?: number | null; dailyRemixes?: number | null; dailyMerges?: number | null; dailyTrends?: number | null } })?.limits;
+  const isPremium = (data as { isPremium?: boolean })?.isPremium ?? profile?.plan === "premium";
+  const xDataSource = (profile as { xDataSource?: string })?.xDataSource ?? "auto";
+  const grokConnected = (data as { grokConnected?: boolean })?.grokConnected ?? false;
+
+  async function updateXDataSource(value: string) {
+    try {
+      const res = await api.users.settings.$patch({ json: { xDataSource: value } });
+      if (!res.ok) throw new Error("Failed");
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Could not update X data source");
+    }
+  }
+
+  async function connectGrok() {
+    if (!grokToken.trim()) {
+      Alert.alert("Token required", "Paste the full ~/.hermes/auth.json file (see docs/grok-setup.md)");
+      return;
+    }
+    setConnecting(true);
+    try {
+      const res = await api.integrations.xai.connect.$post({
+        json: { accessToken: grokToken.trim() },
+      });
+      const body = (await res.json()) as { message?: string; verified?: boolean };
+      if (!res.ok) {
+        throw new Error(body.message ?? `HTTP ${res.status}`);
+      }
+      setGrokToken("");
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      await qc.invalidateQueries({ queryKey: ["inspirations"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Connected",
+        body.verified
+          ? "Grok verified with live x_search — open Context again to refresh"
+          : "Grok is ready for live X search"
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not connect Grok";
+      Alert.alert("Grok connection failed", msg);
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function disconnectGrok() {
+    try {
+      await api.integrations.xai.disconnect.$delete();
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Could not disconnect");
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -102,25 +168,90 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* X data source */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>X Data Source</Text>
+              <Text style={styles.sectionHint}>
+                Live X context for premium. Grok uses your subscription; Apify uses app credits.
+              </Text>
+              <View style={styles.sourceRow}>
+                {X_SOURCE_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.sourceChip,
+                      xDataSource === opt.value && styles.sourceChipActive,
+                    ]}
+                    onPress={() => updateXDataSource(opt.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.sourceChipText,
+                        xDataSource === opt.value && styles.sourceChipTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.grokStatus}>
+                Grok: {grokConnected ? "Connected" : "Not connected"}
+              </Text>
+              {!grokConnected ? (
+                <>
+                  <TextInput
+                    style={styles.tokenInput}
+                    placeholder="Paste full ~/.hermes/auth.json"
+                    placeholderTextColor={colors.textTertiary}
+                    value={grokToken}
+                    onChangeText={setGrokToken}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    secureTextEntry
+                  />
+                  <TouchableOpacity
+                    style={styles.connectBtn}
+                    onPress={connectGrok}
+                    disabled={connecting}
+                  >
+                    {connecting ? (
+                      <ActivityIndicator color={colors.background} size="small" />
+                    ) : (
+                      <Text style={styles.connectBtnText}>Connect Grok</Text>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.setupHint}>
+                    Setup: install Hermes → hermes auth add xai-oauth → copy token from ~/.hermes/auth.json
+                  </Text>
+                </>
+              ) : (
+                <TouchableOpacity style={styles.disconnectBtn} onPress={disconnectGrok}>
+                  <Text style={styles.disconnectBtnText}>Disconnect Grok</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             {/* Usage */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Daily Usage</Text>
               <View style={styles.usageRow}>
                 <Text style={styles.usageLabel}>Remixes</Text>
                 <Text style={styles.usageValue}>
-                  {profile?.remixCount ?? 0} / {isPremium ? "∞" : "5"}
+                  {profile?.remixCount ?? 0} / {isPremium ? "∞" : (limits?.dailyRemixes ?? 20)}
                 </Text>
               </View>
               <View style={styles.usageRow}>
                 <Text style={styles.usageLabel}>Merges</Text>
                 <Text style={styles.usageValue}>
-                  {profile?.mergeCount ?? 0} / {isPremium ? "∞" : "2"}
+                  {profile?.mergeCount ?? 0} / {isPremium ? "∞" : (limits?.dailyMerges ?? 10)}
                 </Text>
               </View>
               <View style={styles.usageRow}>
                 <Text style={styles.usageLabel}>Trend fetches</Text>
                 <Text style={styles.usageValue}>
-                  {profile?.trendCount ?? 0} / {isPremium ? "∞" : "5"}
+                  {profile?.trendCount ?? 0} / {isPremium ? "∞" : (limits?.dailyTrends ?? 20)}
                 </Text>
               </View>
             </View>
@@ -178,6 +309,45 @@ const styles = StyleSheet.create({
   planTextPremium: { color: colors.background },
   section: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 10 },
   sectionTitle: { ...typography.subheading, color: colors.textPrimary },
+  sectionHint: { color: colors.textTertiary, fontSize: 12, lineHeight: 17 },
+  sourceRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  sourceChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+  },
+  sourceChipActive: { borderColor: colors.accent, backgroundColor: colors.accentDim },
+  sourceChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "600" },
+  sourceChipTextActive: { color: colors.background },
+  grokStatus: { color: colors.textSecondary, fontSize: 13, fontWeight: "600" },
+  tokenInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    color: colors.textPrimary,
+    fontSize: 13,
+    backgroundColor: colors.surfaceElevated,
+  },
+  connectBtn: {
+    backgroundColor: colors.accent,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  connectBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
+  disconnectBtn: {
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+  },
+  disconnectBtnText: { color: colors.textSecondary, fontWeight: "600", fontSize: 13 },
+  setupHint: { color: colors.textTertiary, fontSize: 11, lineHeight: 16 },
   nicheGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   nicheChip: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 100 },
   nicheChipText: { color: colors.accent, fontSize: 12, fontWeight: "600" },

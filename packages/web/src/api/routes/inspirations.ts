@@ -7,6 +7,12 @@ import { processInspiration } from "./ai";
 import { randomUUID } from "crypto";
 import { fetchRedditContext } from "../services/context/redditContext";
 import { fetchAIContext } from "../services/context/aiContext";
+import { resolveXContext, enrichXRawContent } from "../services/x/resolveXContext";
+import { getOrCreateUserProfile } from "../services/x/userProfile";
+import { isXPlatform } from "../services/x/xUrl";
+import type { XDataSource } from "../services/x/types";
+import { logXContext } from "../services/x/logger";
+import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
 
 export const inspirationsRoute = new Hono()
   .get("/", requireAuth, async (c) => {
@@ -21,27 +27,46 @@ export const inspirationsRoute = new Hono()
   .post("/", requireAuth, async (c) => {
     const user = c.get("user")!;
     const body = await c.req.json();
-    const { rawContent, sourceUrl, sourcePlatform, type, title, ogImage } = body;
+    let { rawContent, sourceUrl, sourcePlatform, type, title, ogImage } = body;
 
     if (!rawContent) return c.json({ message: "rawContent required" }, 400);
 
-    // Check free tier limit
     const existing = await db
       .select()
       .from(schema.inspirations)
       .where(eq(schema.inspirations.userId, user.id));
 
-    const profile = await db
-      .select()
-      .from(schema.userProfiles)
-      .where(eq(schema.userProfiles.userId, user.id))
-      .get();
+    const profile = await getOrCreateUserProfile(user.id);
 
-    if (profile?.plan === "free" && existing.length >= 5) {
-      return c.json({ message: "Free limit reached. Upgrade to Premium.", limitReached: true }, 403);
+    if (!hasPremiumAccess(profile.plan) && existing.length >= FREE_LIMITS.maxInspirations) {
+      return c.json(
+        {
+          message: `Free limit reached (${FREE_LIMITS.maxInspirations} inspirations). Upgrade to Premium.`,
+          limitReached: true,
+        },
+        403
+      );
     }
 
-    // AI processing
+    const isX = isXPlatform(sourcePlatform ?? "", sourceUrl);
+    if (
+      hasPremiumAccess(profile.plan) &&
+      isX &&
+      sourceUrl &&
+      typeof sourceUrl === "string"
+    ) {
+      try {
+        rawContent = await enrichXRawContent(
+          user.id,
+          profile.xDataSource as XDataSource,
+          sourceUrl,
+          rawContent
+        );
+      } catch (err) {
+        console.error("[inspirations] X enrich failed:", err);
+      }
+    }
+
     let aiData: any = {};
     try {
       aiData = await processInspiration(rawContent, sourceUrl);
@@ -89,41 +114,92 @@ export const inspirationsRoute = new Hono()
     const user = c.get("user")!;
     const { id } = c.req.param();
 
-    const item = await db
-      .select()
-      .from(schema.inspirations)
-      .where(and(eq(schema.inspirations.id, id), eq(schema.inspirations.userId, user.id)))
-      .get();
+    try {
+      const item = await db
+        .select()
+        .from(schema.inspirations)
+        .where(and(eq(schema.inspirations.id, id), eq(schema.inspirations.userId, user.id)))
+        .get();
 
-    if (!item) return c.json({ message: "Not found" }, 404);
+      if (!item) return c.json({ message: "Not found" }, 404);
 
-    const platform = item.sourcePlatform?.toLowerCase() ?? "";
-    const isReddit = platform === "reddit" || (item.sourceUrl ?? "").includes("reddit.com");
-    const isX = platform === "twitter" || platform === "x" ||
-      (item.sourceUrl ?? "").includes("twitter.com") ||
-      (item.sourceUrl ?? "").includes("x.com");
+      const profile = await getOrCreateUserProfile(user.id);
+      const platform = item.sourcePlatform?.toLowerCase() ?? "";
+      const isReddit = platform === "reddit" || (item.sourceUrl ?? "").includes("reddit.com");
+      const isX = isXPlatform(platform, item.sourceUrl);
 
-    let mode: "reddit" | "x" | "ai";
-    let comments: any[] = [];
-    let relatedPosts: any[] = [];
-
-    if (isReddit && item.sourceUrl) {
-      mode = "reddit";
-      const result = await fetchRedditContext(item.sourceUrl);
-      if (result) {
-        comments = result.comments;
-        relatedPosts = result.relatedPosts;
+      if (isReddit && item.sourceUrl) {
+        const result = await fetchRedditContext(item.sourceUrl);
+        if (result) {
+          return c.json({
+            mode: "reddit" as const,
+            comments: result.comments,
+            relatedPosts: result.relatedPosts,
+          }, 200);
+        }
       }
-    } else {
-      mode = isX ? "x" : "ai";
+
+      const includeDebug = process.env.NODE_ENV !== "production";
+
+      if (isX && !hasPremiumAccess(profile.plan)) {
+        logXContext("resolve_premium_blocked", { userId: user.id, inspirationId: id }, "warn");
+        let keyIdeas: string[] = [];
+        let tags: string[] = [];
+        try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
+        try { tags = JSON.parse(item.tags || "[]"); } catch {}
+        const result = await fetchAIContext(item.rawContent, keyIdeas, tags, "x");
+        return c.json({
+          mode: "x" as const,
+          comments: result.comments,
+          relatedPosts: result.relatedPosts,
+          debug: {
+            attempted: [],
+            errors: ["ContentBrain premium required for live X context"],
+            fallbackReason: "premium_required",
+          },
+        }, 200);
+      }
+
+      if (isX && hasPremiumAccess(profile.plan)) {
+        let keyIdeas: string[] = [];
+        let tags: string[] = [];
+        try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
+        try { tags = JSON.parse(item.tags || "[]"); } catch {}
+
+        const result = await resolveXContext({
+          userId: user.id,
+          xDataSource: profile.xDataSource as XDataSource,
+          rawContent: item.rawContent,
+          sourceUrl: item.sourceUrl,
+          keyIdeas,
+          tags,
+          intent: "context",
+          inspirationId: item.id,
+          plan: hasPremiumAccess(profile.plan) ? "premium" : profile.plan,
+        });
+
+        return c.json({
+          mode: result.mode,
+          comments: result.comments,
+          relatedPosts: result.relatedPosts,
+          ...(includeDebug && result.meta ? { debug: result.meta } : {}),
+        }, 200);
+      }
+
       let keyIdeas: string[] = [];
       let tags: string[] = [];
       try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
       try { tags = JSON.parse(item.tags || "[]"); } catch {}
-      const result = await fetchAIContext(item.rawContent, keyIdeas, tags, isX ? "x" : "generic");
-      comments = result.comments;
-      relatedPosts = result.relatedPosts;
-    }
+      const result = await fetchAIContext(item.rawContent, keyIdeas, tags, "generic");
 
-    return c.json({ mode, comments, relatedPosts }, 200);
+      return c.json({
+        mode: "ai" as const,
+        comments: result.comments,
+        relatedPosts: result.relatedPosts,
+      }, 200);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Context failed";
+      console.error("[inspirations] GET /:id/context error:", err);
+      return c.json({ message, error: message }, 500);
+    }
   });

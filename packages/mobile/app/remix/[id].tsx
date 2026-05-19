@@ -88,6 +88,8 @@ export default function RemixStudioScreen() {
   const [fuelItems, setFuelItems] = useState<string[]>([]);
   const [userTake, setUserTake] = useState("");
   const [takeExpanded, setTakeExpanded] = useState(false);
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [researchError, setResearchError] = useState("");
 
   const { data: inspiration, isLoading } = useQuery({
     queryKey: ["inspiration", id],
@@ -99,7 +101,60 @@ export default function RemixStudioScreen() {
     enabled: !!id,
   });
 
+  const { data: profileData } = useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const res = await api.users.profile.$get();
+      const d = await res.json();
+      return "profile" in d ? d : null;
+    },
+  });
+
+  const isPremium =
+    (profileData as { isPremium?: boolean } | null)?.isPremium ??
+    profileData?.profile?.plan === "premium";
+  const isXInspiration =
+    inspiration?.sourcePlatform === "twitter" ||
+    inspiration?.sourcePlatform === "x" ||
+    (inspiration?.sourceUrl ?? "").includes("x.com") ||
+    (inspiration?.sourceUrl ?? "").includes("twitter.com");
+
   const trimmedTake = userTake.trim();
+
+  async function researchOnX() {
+    if (!id || !isPremium) {
+      setResearchError("Premium required for Research on X");
+      return;
+    }
+    setResearchLoading(true);
+    setResearchError("");
+    try {
+      const res = await api.x.research.$post({ json: { inspirationId: id } });
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error((d as any).message ?? "Research failed");
+      }
+      const posts = (d as any).relatedPosts ?? [];
+      const comments = (d as any).comments ?? [];
+      const items: string[] = [];
+      for (const p of posts) {
+        if (p.title) items.push(`${p.title}${p.url ? `\n${p.url}` : ""}`);
+      }
+      for (const c of comments) {
+        if (c.body) items.push(c.body);
+      }
+      if (items.length === 0) {
+        setResearchError("No X posts found. Try Apify source in Settings.");
+        return;
+      }
+      items.slice(0, 6).forEach((text) => addFuel(text));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      setResearchError(err.message ?? "Research failed");
+    } finally {
+      setResearchLoading(false);
+    }
+  }
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -229,6 +284,31 @@ export default function RemixStudioScreen() {
               )}
             </View>
           ) : null}
+
+          {isXInspiration && (
+            <View style={styles.researchCard}>
+              <Text style={styles.researchTitle}>Research on X</Text>
+              <Text style={styles.researchHint}>
+                Pull live posts from X into remix fuel (Grok or Apify per Settings).
+              </Text>
+              <TouchableOpacity
+                style={[styles.researchBtn, !isPremium && styles.researchBtnDisabled]}
+                onPress={researchOnX}
+                disabled={researchLoading || !isPremium}
+              >
+                {researchLoading ? (
+                  <ActivityIndicator color={colors.background} size="small" />
+                ) : (
+                  <Text style={styles.researchBtnText}>
+                    {isPremium ? "Scan X for angles" : "Premium required"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {researchError ? (
+                <Text style={styles.researchError}>{researchError}</Text>
+              ) : null}
+            </View>
+          )}
 
           {/* Fuel Bar */}
           {fuelItems.length > 0 && (
@@ -433,6 +513,26 @@ const styles = StyleSheet.create({
   sourceTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: "600", lineHeight: 21 },
   styleBadge: { backgroundColor: colors.surfaceElevated, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   styleBadgeText: { color: colors.textSecondary, fontSize: 11 },
+
+  researchCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 8,
+  },
+  researchTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 15 },
+  researchHint: { color: colors.textTertiary, fontSize: 12, lineHeight: 17 },
+  researchBtn: {
+    backgroundColor: colors.accent,
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  researchBtnDisabled: { opacity: 0.5 },
+  researchBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
+  researchError: { color: colors.danger, fontSize: 12 },
 
   fuelBar: {
     backgroundColor: colors.surfaceElevated,
