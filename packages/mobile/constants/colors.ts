@@ -1,16 +1,25 @@
+/**
+ * @deprecated Use `useTheme()` from `../theme` instead.
+ * Legacy aliases for gradual migration — maps to Expensify dark theme semantics.
+ */
+import { darkTheme } from "../theme/themes";
+import { colors as palette } from "../theme/colors";
+
 export const colors = {
-  background: "#0A0A0A",
-  surface: "#141414",
-  surfaceElevated: "#1C1C1C",
-  border: "#2A2A2A",
-  accent: "#C8FF00",
-  accentDim: "#8EAD00",
-  textPrimary: "#F5F5F0",
-  textSecondary: "#888880",
-  textTertiary: "#444440",
-  success: "#22C55E",
-  warning: "#FACC15",
-  danger: "#EF4444",
+  background: darkTheme.appBG,
+  surface: darkTheme.cardBG,
+  surfaceElevated: darkTheme.highlightBG,
+  border: darkTheme.border,
+  accent: darkTheme.success,
+  accentDim: palette.green600,
+  green600: palette.green600,
+  green700: palette.green700,
+  textPrimary: darkTheme.text,
+  textSecondary: darkTheme.textSupporting,
+  textTertiary: darkTheme.placeholderText,
+  success: darkTheme.success,
+  warning: darkTheme.warning,
+  danger: darkTheme.danger,
   twitter: "#1D9BF0",
   reddit: "#FF4500",
   instagram: "#E1306C",

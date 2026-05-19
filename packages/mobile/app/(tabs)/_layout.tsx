@@ -1,29 +1,69 @@
 import { Tabs } from "expo-router";
 import { View, StyleSheet } from "react-native";
-import { colors } from "../../constants/colors";
+import { useMemo } from "react";
 import {
   SquaresFourIcon,
   FlameIcon,
   BookmarkSimpleIcon,
   GearIcon,
 } from "phosphor-react-native";
+import { useTheme } from "../../theme";
+import { variables } from "../../theme/variables";
 
-function TabIcon({ icon: Icon, focused }: { icon: any; focused: boolean }) {
+function TabIcon({ icon: Icon, focused }: { icon: typeof SquaresFourIcon; focused: boolean }) {
+  const theme = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        iconWrap: { alignItems: "center", gap: 4 },
+        dot: {
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: theme.success,
+        },
+      }),
+    [theme.success]
+  );
+
   return (
     <View style={styles.iconWrap}>
-      <Icon size={24} color={focused ? colors.accent : colors.textTertiary} weight={focused ? "fill" : "regular"} />
-      {focused && <View style={styles.dot} />}
+      <Icon
+        size={24}
+        color={focused ? theme.iconMenu : theme.icon}
+        weight={focused ? "fill" : "regular"}
+      />
+      {focused ? <View style={styles.dot} /> : null}
     </View>
   );
 }
 
 export default function TabsLayout() {
+  const theme = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        tabBar: {
+          backgroundColor: theme.sidebar,
+          borderTopColor: theme.border,
+          borderTopWidth: 1,
+          height: variables.bottomTabHeight,
+          paddingBottom: variables.spacing2,
+          paddingTop: variables.spacing2,
+        },
+      }),
+    [theme]
+  );
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: false,
+        tabBarActiveTintColor: theme.iconMenu,
+        tabBarInactiveTintColor: theme.icon,
       }}
     >
       <Tabs.Screen
@@ -53,21 +93,3 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    height: 60,
-    paddingBottom: 8,
-    paddingTop: 8,
-  },
-  iconWrap: { alignItems: "center", gap: 4 },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-  },
-});

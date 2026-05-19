@@ -5,7 +5,7 @@
       "package": "com.contentbrain_x9k2.runable",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0A0A0A"
+        "backgroundColor": "#061B09"
       },
       "edgeToEdgeEnabled": true
     },
@@ -19,7 +19,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "cover",
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#061B09"
     },
     "name": "ContentBrain",
     "slug": "contentbrain",

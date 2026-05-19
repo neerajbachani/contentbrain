@@ -1,11 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
 import { getToken } from "../lib/auth";
 import { getApiBase } from "../lib/apiBase";
+import { ThemeProvider, useTheme } from "../theme";
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
@@ -21,6 +26,7 @@ function logAuth(message: string, extra?: unknown) {
 
 function AuthGate() {
   const API_BASE = getApiBase();
+  const theme = useTheme();
 
   useEffect(() => {
     logAuth("resolved API_BASE", { API_BASE });
@@ -62,7 +68,7 @@ function AuthGate() {
   });
   const segments = useSegments();
   const router = useRouter();
-  const session = (data as any)?.user ?? null;
+  const session = (data as { user?: unknown } | null | undefined)?.user ?? null;
   const hasToken = Boolean(getToken());
 
   useEffect(() => {
@@ -102,10 +108,11 @@ function AuthGate() {
 
   return (
     <>
+      <StatusBar style={theme.colorScheme === "dark" ? "light" : "dark"} />
       <Slot />
       {isPending || (isError && !segments[0]) ? (
-        <View style={styles.splash}>
-          <ActivityIndicator size="large" color="#C8FF00" />
+        <View style={[styles.splash, { backgroundColor: theme.appBG }]}>
+          <ActivityIndicator size="large" color={theme.success} />
         </View>
       ) : null}
     </>
@@ -115,18 +122,45 @@ function AuthGate() {
 const styles = StyleSheet.create({
   splash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#0A0A0A",
     alignItems: "center",
     justifyContent: "center",
   },
 });
 
+function RootWithFonts() {
+  const [fontsLoaded, fontError] = useFonts({
+    "ExpensifyNeue-Regular": require("../assets/fonts/ExpensifyNeue-Regular.otf"),
+    "ExpensifyNeue-Bold": require("../assets/fonts/ExpensifyNeue-Bold.otf"),
+    "ExpensifyNeue-Italic": require("../assets/fonts/ExpensifyNeue-Italic.otf"),
+    "ExpensifyNeue-BoldItalic": require("../assets/fonts/ExpensifyNeue-BoldItalic.otf"),
+  });
+
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded || fontError) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    onLayoutRootView();
+  }, [onLayoutRootView]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  return (
+    <ThemeProvider>
+      <AuthGate />
+    </ThemeProvider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" backgroundColor="#0A0A0A" />
-        <AuthGate />
+        <RootWithFonts />
       </QueryClientProvider>
     </SafeAreaProvider>
   );

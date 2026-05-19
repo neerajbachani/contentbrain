@@ -1,12 +1,13 @@
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Linking, ScrollView, Image,
 } from "react-native";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme, useThemedStyles } from "../../theme";
 import { colors } from "../../constants/colors";
-import { typography } from "../../constants/typography";
+import { Text } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -72,15 +73,18 @@ function TrendCard({
   onAddToCanvas,
   onRemix,
   compact = false,
+  styles,
 }: {
   item: TrendRow;
   onAddToCanvas: () => void;
   onRemix: () => void;
   compact?: boolean;
+  styles: ReturnType<typeof makeTrendingStyles>;
 }) {
+  const theme = useTheme();
   const isReddit = item.platform === "reddit";
   const isX = item.platform === "x";
-  const platformColor = isReddit ? colors.reddit : isX ? colors.textPrimary : colors.news;
+  const platformColor = isReddit ? colors.reddit : isX ? theme.text : colors.news;
   const platformLabel =
     item.platformDisplay ?? (isReddit ? "Reddit" : isX ? "X" : "News");
   const summary = displaySummary(item);
@@ -130,16 +134,16 @@ function TrendCard({
 
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.addBtn} onPress={onAddToCanvas}>
-            <PlusIcon size={14} color={colors.accent} weight="bold" />
+            <PlusIcon size={14} color={theme.success} weight="bold" />
             <Text style={styles.addBtnText}>Add to Canvas</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
-            <SparkleIcon size={14} color={colors.background} weight="fill" />
+            <SparkleIcon size={14} color={theme.buttonSuccessText} weight="fill" />
             <Text style={styles.remixBtnText}>Remix</Text>
           </TouchableOpacity>
           {item.url ? (
             <TouchableOpacity onPress={() => Linking.openURL(item.url!)}>
-              <ArrowSquareOutIcon size={18} color={colors.textTertiary} />
+              <ArrowSquareOutIcon size={18} color={theme.placeholderText} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -152,11 +156,14 @@ function TodayXNewsSection({
   groups,
   onAddToCanvas,
   onRemix,
+  styles,
 }: {
   groups: TodayXNewsGroup[];
   onAddToCanvas: (item: TrendRow) => void;
   onRemix: (item: TrendRow) => void;
+  styles: ReturnType<typeof makeTrendingStyles>;
 }) {
+  const theme = useTheme();
   const [expanded, setExpanded] = useState<Record<number, boolean>>({ 0: true });
 
   if (!groups.length) return null;
@@ -164,7 +171,7 @@ function TodayXNewsSection({
   return (
     <View style={styles.todaySection}>
       <View style={styles.todayHeader}>
-        <XLogoIcon size={18} color={colors.textPrimary} />
+        <XLogoIcon size={18} color={theme.text} />
         <Text style={styles.todayTitle}>Today&apos;s X News</Text>
       </View>
 
@@ -183,9 +190,9 @@ function TodayXNewsSection({
                 {stripMarkdown(group.headline.title)}
               </Text>
               {isOpen ? (
-                <CaretUpIcon size={18} color={colors.textSecondary} />
+                <CaretUpIcon size={18} color={theme.textSupporting} />
               ) : (
-                <CaretDownIcon size={18} color={colors.textSecondary} />
+                <CaretDownIcon size={18} color={theme.textSupporting} />
               )}
             </TouchableOpacity>
 
@@ -195,6 +202,7 @@ function TodayXNewsSection({
                   <TrendCard
                     item={group.headline}
                     compact
+                    styles={styles}
                     onAddToCanvas={() => onAddToCanvas(group.headline)}
                     onRemix={() => onRemix(group.headline)}
                   />
@@ -204,6 +212,7 @@ function TodayXNewsSection({
                     key={rel.url ?? rel.id ?? rIdx}
                     item={rel}
                     compact
+                    styles={styles}
                     onAddToCanvas={() => onAddToCanvas(rel)}
                     onRemix={() => onRemix(rel)}
                   />
@@ -220,6 +229,8 @@ function TodayXNewsSection({
 export default function TrendingScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const theme = useTheme();
+  const styles = useThemedStyles(makeTrendingStyles);
   const [selectedNiche, setSelectedNiche] = useState("tech");
 
   const { data, isLoading, refetch } = useQuery({
@@ -291,6 +302,7 @@ export default function TrendingScreen() {
     <>
       <TodayXNewsSection
         groups={todayXNews}
+        styles={styles}
         onAddToCanvas={(item) => addToCanvas.mutate(item)}
         onRemix={handleRemix}
       />
@@ -303,7 +315,7 @@ export default function TrendingScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Today&apos;s Trends</Text>
+        <Text preset="headline" style={styles.headerTitle}>Today&apos;s Trends</Text>
         <TouchableOpacity onPress={() => { refetch(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
           <Text style={styles.refreshText}>Refresh</Text>
         </TouchableOpacity>
@@ -332,12 +344,12 @@ export default function TrendingScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.accent} size="large" />
+          <ActivityIndicator color={theme.success} size="large" />
           <Text style={styles.loadingText}>Fetching trends...</Text>
         </View>
       ) : trends.length === 0 && todayXNews.length === 0 && !limitReached ? (
         <View style={styles.centered}>
-          <FlameIcon size={48} color={colors.textTertiary} />
+          <FlameIcon size={48} color={theme.placeholderText} />
           <Text style={styles.emptyTitle}>No trends found</Text>
           <Text style={styles.emptyText}>Try refreshing or switching niche</Text>
         </View>
@@ -349,10 +361,11 @@ export default function TrendingScreen() {
           }
           ListHeaderComponent={ListHeader}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={colors.accent} />}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={theme.success} />}
           renderItem={({ item }) => (
             <TrendCard
               item={item}
+              styles={styles}
               onAddToCanvas={() => addToCanvas.mutate(item)}
               onRemix={() => handleRemix(item)}
             />
@@ -363,99 +376,79 @@ export default function TrendingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
-  headerTitle: { ...typography.displayMedium, color: colors.textPrimary },
-  refreshText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
-  nichesScroll: { flexGrow: 0 },
-  nichesContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
-  limitBanner: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: "#F59E0B1A",
-    borderWidth: 1,
-    borderColor: "#F59E0B66",
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  limitBannerTitle: { color: colors.warning, fontSize: 13, fontWeight: "700" },
-  limitBannerText: { color: colors.textSecondary, fontSize: 12 },
-  nicheChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  nicheChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  nicheChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: "500" },
-  nicheChipTextActive: { color: colors.background, fontWeight: "700" },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  loadingText: { color: colors.textSecondary, fontSize: 14 },
-  emptyTitle: { ...typography.heading, color: colors.textSecondary },
-  emptyText: { ...typography.caption, color: colors.textTertiary },
-  list: { padding: 16, gap: 12, paddingBottom: 32 },
-  sectionLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "700",
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  todaySection: {
-    marginBottom: 16,
-    gap: 10,
-  },
-  todayHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  todayTitle: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  todayGroup: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  todayHeadlineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  todayHeadline: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 20,
-  },
-  relatedList: {
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  card: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
-  cardCompact: { borderRadius: 12 },
-  thumbnail: { width: "100%", height: 160, backgroundColor: colors.surfaceElevated },
-  thumbnailCompact: { height: 120 },
-  cardBody: { padding: 14, gap: 8 },
-  cardBodyNoPad: { paddingTop: 14 },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  platformRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  platformLabel: { fontSize: 12, fontWeight: "600" },
-  scoreBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
-  scoreText: { color: colors.warning, fontSize: 11, fontWeight: "600" },
-  cardTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: "600", lineHeight: 21 },
-  cardSummary: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
-  cardActions: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
-  addBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-  remixBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
-  remixBtnText: { color: colors.background, fontSize: 13, fontWeight: "700" },
-});
+function makeTrendingStyles(theme: import("../../theme/types").ThemeColors) {
+  return {
+    safe: { flex: 1, backgroundColor: theme.appBG },
+    header: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const, paddingHorizontal: 16, paddingVertical: 12 },
+    headerTitle: { color: theme.text },
+    refreshText: { color: theme.success, fontSize: 14, fontWeight: "600" as const },
+    nichesScroll: { flexGrow: 0 },
+    nichesContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+    limitBanner: {
+      marginHorizontal: 16,
+      marginBottom: 8,
+      backgroundColor: `${theme.warning}1A`,
+      borderWidth: 1,
+      borderColor: `${theme.warning}66`,
+      borderRadius: 12,
+      padding: 12,
+      gap: 4,
+    },
+    limitBannerTitle: { color: theme.warning, fontSize: 13, fontWeight: "700" as const },
+    limitBannerText: { color: theme.textSupporting, fontSize: 12 },
+    nicheChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBG },
+    nicheChipActive: { backgroundColor: theme.success, borderColor: theme.success },
+    nicheChipText: { color: theme.textSupporting, fontSize: 13, fontWeight: "500" as const },
+    nicheChipTextActive: { color: theme.buttonSuccessText, fontWeight: "700" as const },
+    centered: { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, gap: 8 },
+    loadingText: { color: theme.textSupporting, fontSize: 14 },
+    emptyTitle: { color: theme.textSupporting },
+    emptyText: { color: theme.placeholderText },
+    list: { padding: 16, gap: 12, paddingBottom: 32 },
+    sectionLabel: {
+      color: theme.textSupporting,
+      fontSize: 13,
+      fontWeight: "700" as const,
+      marginBottom: 8,
+      marginTop: 4,
+    },
+    todaySection: { marginBottom: 16, gap: 10 },
+    todayHeader: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, marginBottom: 4 },
+    todayTitle: { color: theme.text, fontSize: 16, fontWeight: "700" as const },
+    todayGroup: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: "hidden" as const,
+    },
+    todayHeadlineRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      justifyContent: "space-between" as const,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10,
+    },
+    todayHeadline: { flex: 1, color: theme.text, fontSize: 14, fontWeight: "600" as const, lineHeight: 20 },
+    relatedList: { paddingHorizontal: 10, paddingBottom: 10, gap: 8 },
+    card: { backgroundColor: theme.cardBG, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: "hidden" as const },
+    cardCompact: { borderRadius: 12 },
+    thumbnail: { width: "100%" as const, height: 160, backgroundColor: theme.highlightBG },
+    thumbnailCompact: { height: 120 },
+    cardBody: { padding: 14, gap: 8 },
+    cardBodyNoPad: { paddingTop: 14 },
+    cardTop: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const },
+    platformRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6 },
+    platformLabel: { fontSize: 12, fontWeight: "600" as const },
+    scoreBadge: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4, backgroundColor: theme.highlightBG, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
+    scoreText: { color: theme.warning, fontSize: 11, fontWeight: "600" as const },
+    cardTitle: { color: theme.text, fontSize: 15, fontWeight: "600" as const, lineHeight: 21 },
+    cardSummary: { color: theme.textSupporting, fontSize: 13, lineHeight: 18 },
+    cardActions: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, marginTop: 4 },
+    addBtn: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, borderWidth: 1, borderColor: theme.success, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+    addBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" as const },
+    remixBtn: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, backgroundColor: theme.success, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+    remixBtnText: { color: theme.buttonSuccessText, fontSize: 13, fontWeight: "700" as const },
+  };
+}

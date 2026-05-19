@@ -626,6 +626,6 @@ const styles = StyleSheet.create({
   whyBox: { backgroundColor: colors.surfaceElevated, borderRadius: 10, padding: 10, gap: 2 },
   whyLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: "600" },
   whyText: { color: colors.textSecondary, fontSize: 13 },
-  copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, alignSelf: "flex-start" },
+  copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, alignSelf: "flex-start" },
   copyBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
 });

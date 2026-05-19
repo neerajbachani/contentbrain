@@ -593,8 +593,8 @@ const styles = StyleSheet.create({
 
   // Actions
   cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 },
-  remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
-  remixBtnFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.accent, paddingVertical: 10, borderRadius: 10, marginTop: 2 },
+  remixBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+  remixBtnFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.accent, paddingVertical: 10, borderRadius: 100, marginTop: 2 },
   remixBtnText: { color: colors.background, fontSize: 13, fontWeight: "700" },
 
   // Multi-select bar
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
   selectBarActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   cancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
   cancelBtnText: { color: colors.textSecondary, fontSize: 14 },
-  mergeBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  mergeBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100 },
   mergeBtnText: { color: colors.background, fontWeight: "700", fontSize: 14 },
 
   // Modal
@@ -623,6 +623,6 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.textSecondary, fontSize: 13 },
   chipTextSelected: { color: colors.background, fontWeight: "700" },
-  addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.accent, padding: 16, borderRadius: 12, marginTop: 8 },
+  addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.accent, padding: 16, borderRadius: 100, marginTop: 8 },
   addBtnText: { color: colors.background, fontWeight: "700", fontSize: 16 },
 });

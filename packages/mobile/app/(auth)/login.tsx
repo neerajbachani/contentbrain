@@ -1,24 +1,47 @@
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
-} from "react-native";
-import { useState } from "react";
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { useMemo, useState } from "react";
 import { Link, useRouter } from "expo-router";
-import { colors } from "../../constants/colors";
-import { typography } from "../../constants/typography";
 import { authClient, captureToken } from "../../lib/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BrainIcon } from "phosphor-react-native";
+import { useTheme } from "../../theme";
+import { variables } from "../../theme/variables";
+import { Button, Text, TextInput } from "../../components/ui";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safe: { flex: 1, backgroundColor: theme.appBG },
+        container: { flexGrow: 1, justifyContent: "center", padding: variables.spacing5 },
+        logo: { alignItems: "center", marginBottom: 48 },
+        appName: { marginTop: variables.spacing3 },
+        tagline: { marginTop: 4, textAlign: "center" },
+        form: { gap: variables.spacing3 },
+        error: {
+          color: theme.textError,
+          fontSize: variables.fontSizeLabel,
+          backgroundColor: `${theme.danger}20`,
+          padding: 10,
+          borderRadius: variables.componentBorderRadius,
+        },
+        footer: { flexDirection: "row", justifyContent: "center", marginTop: variables.spacing3 },
+      }),
+    [theme]
+  );
+
   async function handleLogin() {
-    if (!email || !password) { setError("Fill in all fields"); return; }
+    if (!email || !password) {
+      setError("Fill in all fields");
+      return;
+    }
     setLoading(true);
     setError("");
     const result = await authClient.signIn.email(
@@ -41,20 +64,22 @@ export default function LoginScreen() {
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.logo}>
-            <BrainIcon size={48} color={colors.accent} weight="fill" />
-            <Text style={styles.appName}>ContentBrain</Text>
-            <Text style={styles.tagline}>Your AI-powered content creation OS</Text>
+            <BrainIcon size={48} color={theme.success} weight="fill" />
+            <Text preset="headline" style={styles.appName}>
+              ContentBrain
+            </Text>
+            <Text preset="supporting" color={theme.textSupporting} style={styles.tagline}>
+              Your AI-powered content creation OS
+            </Text>
           </View>
 
           <View style={styles.form}>
-            <Text style={styles.title}>Welcome back</Text>
+            <Text preset="headlineH1">Welcome back</Text>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <TextInput
-              style={styles.input}
               placeholder="Email"
-              placeholderTextColor={colors.textTertiary}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -62,26 +87,22 @@ export default function LoginScreen() {
               autoCorrect={false}
             />
             <TextInput
-              style={styles.input}
               placeholder="Password"
-              placeholderTextColor={colors.textTertiary}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
             />
 
-            <TouchableOpacity style={styles.btn} onPress={handleLogin} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <Text style={styles.btnText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
+            <Button variant="success" size="large" onPress={handleLogin} isLoading={loading} isDisabled={loading}>
+              Sign In
+            </Button>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
+              <Text color={theme.textSupporting}>Don't have an account? </Text>
               <Link href="/(auth)/register">
-                <Text style={styles.link}>Sign Up</Text>
+                <Text color={theme.link} family="bold">
+                  Sign Up
+                </Text>
               </Link>
             </View>
           </View>
@@ -90,32 +111,3 @@ export default function LoginScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  container: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  logo: { alignItems: "center", marginBottom: 48 },
-  appName: { ...typography.displayMedium, color: colors.textPrimary, marginTop: 12 },
-  tagline: { ...typography.caption, color: colors.textSecondary, marginTop: 4, textAlign: "center" },
-  form: { gap: 12 },
-  title: { ...typography.heading, color: colors.textPrimary, marginBottom: 8 },
-  error: { color: colors.danger, fontSize: 13, backgroundColor: "#EF444420", padding: 10, borderRadius: 8 },
-  input: {
-    backgroundColor: colors.surfaceElevated,
-    color: colors.textPrimary,
-    padding: 14,
-    borderRadius: 12,
-    fontSize: 15,
-  },
-  btn: {
-    backgroundColor: colors.accent,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  btnText: { color: colors.background, fontWeight: "700", fontSize: 16 },
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: 12 },
-  footerText: { color: colors.textSecondary, fontSize: 14 },
-  link: { color: colors.accent, fontSize: 14, fontWeight: "600" },
-});

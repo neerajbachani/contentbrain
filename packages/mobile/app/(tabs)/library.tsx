@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   tag: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
   tagText: { color: colors.textTertiary, fontSize: 10 },
   rowActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
-  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
   actionBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
   badge: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   badgeText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
