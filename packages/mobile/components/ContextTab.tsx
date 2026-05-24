@@ -1,5 +1,5 @@
 import {
-  View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image,
 } from "react-native";
 import { useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +30,7 @@ interface ContextPost {
   score: number;
   platform: string;
   summary?: string;
+  thumbnailUrl?: string;
 }
 
 type ContextMode = "reddit" | "x" | "xai" | "apify" | "ai";
@@ -112,8 +113,17 @@ function makeContextStyles(theme: ThemeColors) {
       borderRadius: 14,
       borderWidth: 1,
       borderColor: theme.border,
+      overflow: "hidden" as const,
+      gap: 0,
+    },
+    cardInner: {
       padding: 14,
       gap: variables.spacing2,
+    },
+    cardThumbnail: {
+      width: "100%" as const,
+      height: 100,
+      backgroundColor: theme.highlightBG,
     },
     cardHeader: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: variables.spacing2 },
     cardAuthor: { color: theme.textSupporting, fontSize: 12, fontWeight: "600" as const, flex: 1 },
@@ -225,6 +235,7 @@ function ContextCard({
   const canvasPlatform = isComment ? (mode === "reddit" ? "reddit" : "x") : (post.platform ?? "custom");
   const [expanded, setExpanded] = useState(false);
   const showExpand = isComment && body.length > 180;
+  const thumbnailUrl = !isComment ? post.thumbnailUrl?.trim() : undefined;
 
   function handleFuel() {
     onAddFuel(fuelText);
@@ -239,37 +250,47 @@ function ContextCard({
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardAuthor} numberOfLines={1}>
-          {title}
-        </Text>
-        <ScoreBadge score={score} mode={mode} styles={styles} />
-      </View>
-      {body ? (
-        <TouchableOpacity
-          activeOpacity={showExpand ? 0.85 : 1}
-          onPress={() => {
-            if (!showExpand) return;
-            setExpanded((prev) => !prev);
-          }}
-        >
-          <Text style={styles.cardBody} numberOfLines={expanded ? undefined : 4}>
-            {body}
-          </Text>
-          {showExpand ? (
-            <Text style={styles.expandText}>{expanded ? "Show less" : "Tap to expand"}</Text>
-          ) : null}
-        </TouchableOpacity>
+      {thumbnailUrl ? (
+        <Image
+          source={{ uri: thumbnailUrl }}
+          style={styles.cardThumbnail}
+          resizeMode="cover"
+          accessibilityLabel="Post preview"
+        />
       ) : null}
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.fuelBtn} onPress={handleFuel}>
-          <LightningIcon size={13} color={theme.success} weight="fill" />
-          <Text style={styles.fuelBtnText}>Use as Fuel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <BookmarkSimpleIcon size={13} color={theme.textSupporting} />
-          <Text style={styles.saveBtnText}>Save to Canvas</Text>
-        </TouchableOpacity>
+      <View style={styles.cardInner}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardAuthor} numberOfLines={1}>
+            {title}
+          </Text>
+          <ScoreBadge score={score} mode={mode} styles={styles} />
+        </View>
+        {body ? (
+          <TouchableOpacity
+            activeOpacity={showExpand ? 0.85 : 1}
+            onPress={() => {
+              if (!showExpand) return;
+              setExpanded((prev) => !prev);
+            }}
+          >
+            <Text style={styles.cardBody} numberOfLines={expanded ? undefined : 4}>
+              {body}
+            </Text>
+            {showExpand ? (
+              <Text style={styles.expandText}>{expanded ? "Show less" : "Tap to expand"}</Text>
+            ) : null}
+          </TouchableOpacity>
+        ) : null}
+        <View style={styles.cardActions}>
+          <TouchableOpacity style={styles.fuelBtn} onPress={handleFuel}>
+            <LightningIcon size={13} color={theme.success} weight="fill" />
+            <Text style={styles.fuelBtnText}>Use as Fuel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <BookmarkSimpleIcon size={13} color={theme.textSupporting} />
+            <Text style={styles.saveBtnText}>Save to Canvas</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );

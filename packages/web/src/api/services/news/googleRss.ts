@@ -2,7 +2,9 @@ import { NICHE_KEYWORDS } from "../nicheData";
 import { normalizeTrend, TrendItem } from "../normalizer";
 
 // Simple RSS parser — no external dep needed
-async function parseRss(url: string): Promise<Array<{ title: string; link?: string; contentSnippet?: string }>> {
+async function parseRss(
+  url: string
+): Promise<Array<{ title: string; link?: string; contentSnippet?: string; imageUrl?: string }>> {
   const res = await fetch(url, {
     headers: { "User-Agent": "ContentBrain/1.0" },
   });

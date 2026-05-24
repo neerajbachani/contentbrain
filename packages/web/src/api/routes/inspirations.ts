@@ -13,16 +13,47 @@ import { isXPlatform } from "../services/x/xUrl";
 import type { XDataSource } from "../services/x/types";
 import { logXContext } from "../services/x/logger";
 import { FREE_LIMITS, hasPremiumAccess } from "../config/limits";
+import {
+  backfillInspirationOgImage,
+  resolveOgImageForNewInspiration,
+} from "../services/inspirationOgImage";
 import { getLinkPreview } from "../services/linkPreview/ogScraper";
+import { enrichYouTubeRawContent } from "../services/youtube/youtubeTranscript";
+import { isYouTubePlatform } from "../services/youtube/youtubeUrl";
+import { enrichContextPosts } from "../services/x/enrichMemePosts";
+import type { ContextPost } from "../services/context/redditContext";
+
+async function enrichContextRelatedPosts(relatedPosts: ContextPost[]) {
+  const { posts } = await enrichContextPosts(relatedPosts);
+  return posts;
+}
 
 export const inspirationsRoute = new Hono()
   .get("/", requireAuth, async (c) => {
     const user = c.get("user")!;
-    const items = await db
+    let items = await db
       .select()
       .from(schema.inspirations)
       .where(eq(schema.inspirations.userId, user.id))
       .orderBy(schema.inspirations.createdAt);
+
+    const needsBackfill = items
+      .filter(
+        (row) =>
+          !row.ogImage?.trim() &&
+          row.sourceUrl &&
+          isXPlatform(row.sourcePlatform ?? "", row.sourceUrl)
+      )
+      .slice(0, 8);
+
+    if (needsBackfill.length > 0) {
+      const backfilled = await Promise.all(
+        needsBackfill.map((row) => backfillInspirationOgImage(row))
+      );
+      const byId = new Map(backfilled.map((row) => [row.id, row]));
+      items = items.map((row) => byId.get(row.id) ?? row);
+    }
+
     return c.json({ inspirations: items.reverse() }, 200);
   })
   .post("/", requireAuth, async (c) => {
@@ -32,13 +63,17 @@ export const inspirationsRoute = new Hono()
 
     if (!rawContent) return c.json({ message: "rawContent required" }, 400);
 
-    // Auto-fetch OG image for X/Twitter URLs when client didn't provide one
-    if (!ogImage && sourceUrl && typeof sourceUrl === "string" &&
-        isXPlatform(sourcePlatform ?? "", sourceUrl)) {
+    if (!ogImage && sourceUrl && typeof sourceUrl === "string") {
       try {
-        const preview = await getLinkPreview(sourceUrl);
-        if (preview.imageUrl) ogImage = preview.imageUrl;
-        if (!title && preview.title) title = preview.title;
+        ogImage = await resolveOgImageForNewInspiration(
+          sourceUrl,
+          sourcePlatform,
+          ogImage
+        );
+        if (!title && isXPlatform(sourcePlatform ?? "", sourceUrl)) {
+          const preview = await getLinkPreview(sourceUrl);
+          if (preview.title) title = preview.title;
+        }
       } catch { /* non-fatal */ }
     }
 
@@ -75,6 +110,15 @@ export const inspirationsRoute = new Hono()
         );
       } catch (err) {
         console.error("[inspirations] X enrich failed:", err);
+      }
+    }
+
+    const isYoutube = isYouTubePlatform(sourcePlatform ?? "", sourceUrl);
+    if (isYoutube && sourceUrl && typeof sourceUrl === "string") {
+      try {
+        rawContent = await enrichYouTubeRawContent(sourceUrl, rawContent);
+      } catch (err) {
+        console.error("[inspirations] YouTube enrich failed:", err);
       }
     }
 
@@ -119,7 +163,8 @@ export const inspirationsRoute = new Hono()
       .where(and(eq(schema.inspirations.id, id), eq(schema.inspirations.userId, user.id)))
       .get();
     if (!item) return c.json({ message: "Not found" }, 404);
-    return c.json({ inspiration: item }, 200);
+    const inspiration = await backfillInspirationOgImage(item);
+    return c.json({ inspiration }, 200);
   })
   .get("/:id/context", requireAuth, async (c) => {
     const user = c.get("user")!;
@@ -142,10 +187,11 @@ export const inspirationsRoute = new Hono()
       if (isReddit && item.sourceUrl) {
         const result = await fetchRedditContext(item.sourceUrl);
         if (result) {
+          const relatedPosts = await enrichContextRelatedPosts(result.relatedPosts);
           return c.json({
             mode: "reddit" as const,
             comments: result.comments,
-            relatedPosts: result.relatedPosts,
+            relatedPosts,
           }, 200);
         }
       }
@@ -159,10 +205,11 @@ export const inspirationsRoute = new Hono()
         try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
         try { tags = JSON.parse(item.tags || "[]"); } catch {}
         const result = await fetchAIContext(item.rawContent, keyIdeas, tags, "x");
+        const relatedPosts = await enrichContextRelatedPosts(result.relatedPosts);
         return c.json({
           mode: "x" as const,
           comments: result.comments,
-          relatedPosts: result.relatedPosts,
+          relatedPosts,
           debug: {
             attempted: [],
             errors: ["ContentBrain premium required for live X context"],
@@ -189,10 +236,11 @@ export const inspirationsRoute = new Hono()
           plan: hasPremiumAccess(profile.plan) ? "premium" : profile.plan,
         });
 
+        const relatedPosts = await enrichContextRelatedPosts(result.relatedPosts);
         return c.json({
           mode: result.mode,
           comments: result.comments,
-          relatedPosts: result.relatedPosts,
+          relatedPosts,
           ...(includeDebug && result.meta ? { debug: result.meta } : {}),
         }, 200);
       }
@@ -202,11 +250,12 @@ export const inspirationsRoute = new Hono()
       try { keyIdeas = JSON.parse(item.keyIdeas || "[]"); } catch {}
       try { tags = JSON.parse(item.tags || "[]"); } catch {}
       const result = await fetchAIContext(item.rawContent, keyIdeas, tags, "generic");
+      const relatedPosts = await enrichContextRelatedPosts(result.relatedPosts);
 
       return c.json({
         mode: "ai" as const,
         comments: result.comments,
-        relatedPosts: result.relatedPosts,
+        relatedPosts,
       }, 200);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Context failed";

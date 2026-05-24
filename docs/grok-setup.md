@@ -40,6 +40,10 @@ Live X search uses **your** X Premium / SuperGrok subscription via xAI OAuth. Co
 
 6. In ContentBrain **Settings → Grok**, paste the full JSON and tap **Connect**. The server runs a live `x_search` probe — you must see **verified** or an explicit error.
 
+## Meme search in Remix Studio
+
+When you generate **Meme Idea** remixes, ContentBrain uses the same Grok / Hermes token to run `x_search` for viral meme posts with images on your topic. No separate setup — connect Grok once in Settings.
+
 ## Read token (WSL)
 
 ```bash

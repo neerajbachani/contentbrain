@@ -39,13 +39,17 @@ async function runLlmFallback(input: ResolveXContextInput): Promise<XContextResu
 }
 
 async function tryApifyPath(input: ResolveXContextInput): Promise<XContextResult | null> {
-  if (input.intent === "research") {
+  if (input.intent === "meme_search" || input.intent === "research") {
     const query =
-      input.nicheKeywords?.slice(0, 2).join(" ") ||
-      input.tags?.slice(0, 2).join(" ") ||
-      input.keyIdeas?.slice(0, 2).join(" ") ||
-      input.rawContent.slice(0, 80);
-    logXContext("apify_research_start", { query: query.slice(0, 80) });
+      input.intent === "meme_search"
+        ? `${input.nicheKeywords?.slice(0, 2).join(" ") || input.tags?.slice(0, 2).join(" ") || input.keyIdeas?.slice(0, 2).join(" ") || input.rawContent.slice(0, 80)} meme`
+        : input.nicheKeywords?.slice(0, 2).join(" ") ||
+          input.tags?.slice(0, 2).join(" ") ||
+          input.keyIdeas?.slice(0, 2).join(" ") ||
+          input.rawContent.slice(0, 80);
+    logXContext(input.intent === "meme_search" ? "apify_meme_search_start" : "apify_research_start", {
+      query: query.slice(0, 80),
+    });
     const search = await fetchApifyXSearch(query, 8);
     if (search && (search.comments.length > 0 || search.relatedPosts.length > 0)) {
       logXContext("apify_research_done", {

@@ -44,6 +44,7 @@ export const remixes = sqliteTable("remixes", {
   outputContent: text("output_content").notNull(),
   platform: text("platform"),
   variations: text("variations").notNull().default("[]"), // JSON array
+  selectedVariationIndex: integer("selected_variation_index").notNull().default(0),
   imageUrl: text("image_url"),
   imageModel: text("image_model"),
   imagePrompt: text("image_prompt"),
@@ -76,6 +77,9 @@ export const canvases = sqliteTable("canvases", {
   name: text("name").notNull().default("Untitled Canvas"),
   inspirationIds: text("inspiration_ids").notNull().default("[]"),
   remixIds: text("remix_ids").notNull().default("[]"),
+  layoutJson: text("layout_json").notNull().default("{}"),
+  viewState: text("view_state").notNull().default("{}"),
+  clustersJson: text("clusters_json").notNull().default("[]"),
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

@@ -21,6 +21,17 @@ export const remixesRoute = new Hono()
       .orderBy(schema.remixes.createdAt);
     return c.json({ remixes: items.reverse() }, 200);
   })
+  .get("/:id", requireAuth, async (c) => {
+    const user = c.get("user")!;
+    const { id } = c.req.param();
+    const remix = await db
+      .select()
+      .from(schema.remixes)
+      .where(and(eq(schema.remixes.id, id), eq(schema.remixes.userId, user.id)))
+      .get();
+    if (!remix) return c.json({ message: "Remix not found" }, 404);
+    return c.json({ remix }, 200);
+  })
   .post("/generate", requireAuth, async (c) => {
     const user = c.get("user")!;
     const body = await c.req.json();
@@ -86,6 +97,7 @@ export const remixesRoute = new Hono()
       outputContent: result.variations?.[0]?.content ?? "",
       platform: targetPlatform,
       variations: JSON.stringify(result.variations ?? []),
+      selectedVariationIndex: 0,
     }).returning();
 
     // Increment count
@@ -97,6 +109,47 @@ export const remixesRoute = new Hono()
     }
 
     return c.json({ remix, variations: result.variations }, 201);
+  })
+  .patch("/:id", requireAuth, async (c) => {
+    const user = c.get("user")!;
+    const { id } = c.req.param();
+    const body = await c.req.json();
+    const selectedVariationIndex = body.selectedVariationIndex;
+
+    if (
+      typeof selectedVariationIndex !== "number" ||
+      selectedVariationIndex < 0 ||
+      selectedVariationIndex > 2 ||
+      !Number.isInteger(selectedVariationIndex)
+    ) {
+      return c.json({ message: "selectedVariationIndex must be 0, 1, or 2" }, 400);
+    }
+
+    const existing = await db
+      .select()
+      .from(schema.remixes)
+      .where(and(eq(schema.remixes.id, id), eq(schema.remixes.userId, user.id)))
+      .get();
+
+    if (!existing) return c.json({ message: "Remix not found" }, 404);
+
+    let variations: Array<{ content?: string }> = [];
+    try {
+      variations = JSON.parse(existing.variations || "[]");
+    } catch {
+      variations = [];
+    }
+
+    const outputContent =
+      variations[selectedVariationIndex]?.content ?? existing.outputContent;
+
+    const [remix] = await db
+      .update(schema.remixes)
+      .set({ selectedVariationIndex, outputContent })
+      .where(and(eq(schema.remixes.id, id), eq(schema.remixes.userId, user.id)))
+      .returning();
+
+    return c.json({ remix }, 200);
   })
   .delete("/:id", requireAuth, async (c) => {
     const user = c.get("user")!;

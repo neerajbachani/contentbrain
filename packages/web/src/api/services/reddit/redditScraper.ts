@@ -21,7 +21,7 @@ function decodeHtmlEntities(str: string): string {
  * 1. preview.images[0].source.url  (high-res, always present for link posts)
  * 2. p.thumbnail if it's an http URL (low-res fallback)
  */
-function getRedditThumbnail(p: any): string | undefined {
+export function getRedditThumbnail(p: any): string | undefined {
   const previewUrl = p?.preview?.images?.[0]?.source?.url;
   if (previewUrl) return decodeHtmlEntities(previewUrl);
   const thumb = p?.thumbnail;

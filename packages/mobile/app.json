@@ -34,7 +34,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ContentBrain to save meme images to your photo library.",
+          "savePhotosPermission": "Allow ContentBrain to save meme images to your photo library."
+        }
+      ]
     ]
   }
 }

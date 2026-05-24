@@ -9,6 +9,7 @@ import { trendsRoute } from "./routes/trends";
 import { scrapeRoute } from "./routes/scrape";
 import { usersRoute } from "./routes/users";
 import { integrationsRoute } from "./routes/integrations";
+import { canvasesRoute } from "./routes/canvases";
 import { xRoute } from "./routes/x";
 import { startScheduler } from "./jobs/scheduler";
 
@@ -28,6 +29,7 @@ const app = new Hono()
   .route("/scrape", scrapeRoute)
   .route("/users", usersRoute)
   .route("/integrations", integrationsRoute)
+  .route("/canvases", canvasesRoute)
   .route("/x", xRoute);
 
 export type AppType = typeof app;

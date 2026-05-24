@@ -20,6 +20,15 @@ import type { ThemeColors } from "../../theme/types";
 const TABS = ["Inspirations", "Remixes"] as const;
 type Tab = (typeof TABS)[number];
 
+function primaryInspirationId(item: { inspirationIds?: string }): string | null {
+  try {
+    const ids = JSON.parse(item.inspirationIds || "[]");
+    return Array.isArray(ids) && ids.length > 0 ? ids[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 function makeStyles(theme: ThemeColors) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.appBG },
@@ -91,17 +100,30 @@ function InspirationRow({ item, onDelete }: any) {
 function RemixRow({ item, onDelete }: any) {
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
   let variations: any[] = [];
   try { variations = JSON.parse(item.variations || "[]"); } catch {}
-  const content = variations[0]?.content || item.outputContent;
+  const idx =
+    typeof item.selectedVariationIndex === "number" ? item.selectedVariationIndex : 0;
+  const content = variations[idx]?.content || item.outputContent;
 
   async function copyAll() {
     await Clipboard.setStringAsync(content);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
+  function openInStudio() {
+    const inspirationId = primaryInspirationId(item);
+    if (!inspirationId) {
+      Alert.alert("Cannot open", "No linked inspiration for this remix.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/remix/${inspirationId}?remixId=${item.id}`);
+  }
+
   return (
-    <View style={styles.row}>
+    <TouchableOpacity style={styles.row} onPress={openInStudio} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{item.outputType.replace("merged_", "")}</Text>
@@ -118,7 +140,7 @@ function RemixRow({ item, onDelete }: any) {
           <TrashIcon size={16} color={theme.placeholderText} />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

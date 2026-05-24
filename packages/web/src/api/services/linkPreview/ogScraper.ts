@@ -4,6 +4,10 @@ import * as schema from "../../database/schema";
 import { eq } from "drizzle-orm";
 import { memCache } from "../../cache/memCache";
 import { randomUUID } from "crypto";
+import {
+  fetchTweetSyndicationThumbnail,
+  resolveXPostMedia,
+} from "../x/resolveXPostMedia";
 
 export interface LinkPreview {
   url: string;
@@ -26,29 +30,6 @@ function isTwitterUrl(url: string): boolean {
 export function parseTweetId(url: string): string | null {
   const match = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/i);
   return match?.[1] ?? null;
-}
-
-async function fetchTweetSyndicationThumbnail(tweetId: string): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&lang=en`,
-      { headers: { "User-Agent": "Mozilla/5.0 (compatible; ContentBrain/1.0)" } }
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      photos?: { url?: string }[];
-      video?: { poster?: string };
-      entities?: { media?: { media_url_https?: string }[] };
-    };
-    return (
-      data?.photos?.[0]?.url ??
-      data?.video?.poster ??
-      data?.entities?.media?.[0]?.media_url_https ??
-      null
-    );
-  } catch {
-    return null;
-  }
 }
 
 function stripHtml(input: string): string {
@@ -86,31 +67,11 @@ async function persistPreview(preview: LinkPreview): Promise<void> {
     });
 }
 
-/** Resolve X post image only (syndication + oEmbed), bypassing stale null DB cache. */
+/** Resolve X post image only (syndication + FxTwitter + oEmbed), bypassing stale null DB cache. */
 export async function resolveXThumbnailOnly(url: string): Promise<string | null> {
   if (!isTwitterUrl(url)) return null;
-
-  try {
-    const oembedRes = await fetch(
-      `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`,
-      { headers: { "User-Agent": "Mozilla/5.0 (compatible; ContentBrain/1.0)" } }
-    );
-    if (oembedRes.ok) {
-      const oembed = (await oembedRes.json()) as { thumbnail_url?: string };
-      if (oembed.thumbnail_url) return String(oembed.thumbnail_url);
-    }
-  } catch {
-    /* fall through */
-  }
-
-  const tweetId = parseTweetId(url);
-  if (tweetId) {
-    const syndication = await fetchTweetSyndicationThumbnail(tweetId);
-    if (syndication) return syndication;
-  }
-
-  // No real media found — return null rather than falling back to profile picture
-  return null;
+  const { imageUrl } = await resolveXPostMedia(url);
+  return imageUrl;
 }
 
 export async function getLinkPreview(url: string): Promise<LinkPreview> {

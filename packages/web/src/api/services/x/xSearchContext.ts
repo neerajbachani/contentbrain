@@ -35,6 +35,23 @@ function buildPrompt(input: {
     return `Use x_search to find the latest X posts (last 7 days) about: ${kw}. Related to: "${input.rawContent.slice(0, 200)}". Return 5-8 posts with URLs.`;
   }
 
+  if (input.intent === "meme_search") {
+    const kw =
+      input.nicheKeywords?.slice(0, 3).join(" ") ||
+      tags ||
+      ideas ||
+      input.rawContent.slice(0, 120);
+    return `Use x_search to find viral meme posts on X from the last 14 days about: ${kw}.
+
+Return 8-12 distinct X post URLs where the post includes an image meme (not text-only jokes).
+ONLY include posts that have a photo or image attachment — skip text-only viral posts.
+Prefer posts with photo/media attachments and strong engagement.
+When available, include direct pbs.twimg.com image URLs for each meme post.
+Topic context: "${input.rawContent.slice(0, 300)}"
+
+For each post include: post URL, post text, author handle, and engagement (likes/reposts/views).`;
+  }
+
   if (input.intent === "trending_global") {
     return `Use x_search to find what is currently trending on X right now (Explore / Trending tab), globally.
 
@@ -71,6 +88,17 @@ Return real reply-style summaries and cite X post URLs. Focus on diverse perspec
 function xSearchToolConfig(intent: XContextIntent): Record<string, unknown> {
   const to = new Date();
   const from = new Date(to);
+
+  if (intent === "meme_search") {
+    from.setDate(from.getDate() - 14);
+    return {
+      type: "x_search",
+      from_date: from.toISOString().slice(0, 10),
+      to_date: to.toISOString().slice(0, 10),
+      enable_image_understanding: true,
+    };
+  }
+
   from.setDate(from.getDate() - 2);
 
   const base: Record<string, unknown> = {
@@ -195,7 +223,7 @@ export async function fetchXaiSearchContext(
     }
 
     const data = response.data;
-    const parsed = parseXaiResponsesPayload(data);
+    const parsed = parseXaiResponsesPayload(data, input.intent);
 
     if (parsed.comments.length === 0 && parsed.relatedPosts.length === 0) {
       logXaiOutputStructure(data);

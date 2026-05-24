@@ -1,4 +1,5 @@
 import { getRedditToken } from "../reddit/redditAuth";
+import { getRedditThumbnail } from "../reddit/redditScraper";
 
 export interface ContextComment {
   author: string;
@@ -84,6 +85,7 @@ export async function fetchRedditContext(
         score: p.score ?? 0,
         platform: "reddit",
         summary: p.selftext?.slice(0, 200) || undefined,
+        thumbnailUrl: getRedditThumbnail(p),
       });
       if (relatedPosts.length >= 4) break;
     }

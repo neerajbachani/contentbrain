@@ -6,6 +6,7 @@ export type XContextIntent =
   | "context"
   | "enrich"
   | "research"
+  | "meme_search"
   | "trending_global"
   | "trending_niche";
 

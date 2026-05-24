@@ -43,6 +43,32 @@ function mapTweetToComments(tweets: any[], mainTweetId?: string): ContextComment
   return comments.slice(0, 12);
 }
 
+export function extractApifyTweetThumbnail(tweet: Record<string, unknown>): string | undefined {
+  const media = tweet.media;
+  if (Array.isArray(media)) {
+    for (const m of media) {
+      if (m && typeof m === "object") {
+        const url =
+          (m as Record<string, unknown>).media_url_https ??
+          (m as Record<string, unknown>).url;
+        if (typeof url === "string" && url.startsWith("http")) return url;
+      }
+    }
+  }
+  const photos = tweet.photos;
+  if (Array.isArray(photos) && photos[0] && typeof photos[0] === "object") {
+    const url = (photos[0] as Record<string, unknown>).url;
+    if (typeof url === "string" && url.startsWith("http")) return url;
+  }
+  const ext = tweet.extendedEntities as Record<string, unknown> | undefined;
+  const extMedia = ext?.media;
+  if (Array.isArray(extMedia) && extMedia[0] && typeof extMedia[0] === "object") {
+    const url = (extMedia[0] as Record<string, unknown>).media_url_https;
+    if (typeof url === "string" && url.startsWith("http")) return url;
+  }
+  return undefined;
+}
+
 function mapTweetToRelated(tweets: any[]): ContextPost[] {
   return tweets
     .filter((t) => t.text && t.url)
@@ -53,7 +79,36 @@ function mapTweetToRelated(tweets: any[]): ContextPost[] {
       score: (t.likeCount ?? 0) + (t.retweetCount ?? 0),
       platform: "x",
       summary: t.text.length > 200 ? t.text.slice(200, 400) : undefined,
+      thumbnailUrl: extractApifyTweetThumbnail(t as Record<string, unknown>),
     }));
+}
+
+/** Fetch a single tweet via Apify and return its media thumbnail if any. */
+export async function fetchApifyTweetThumbnail(sourceUrl: string): Promise<string | undefined> {
+  const token = process.env.APIFY_API_TOKEN;
+  if (!token) return undefined;
+
+  const url = normalizeXUrl(sourceUrl);
+  try {
+    const tweets = await runApifyActor(
+      APIFY_TWITTER_ACTOR,
+      {
+        startUrls: [{ url }],
+        maxItems: 3,
+        addUserInfo: true,
+      },
+      token,
+      { maxWaitMs: 30_000, itemLimit: 3 }
+    );
+    for (const t of tweets) {
+      if (!t || typeof t !== "object") continue;
+      const thumb = extractApifyTweetThumbnail(t as Record<string, unknown>);
+      if (thumb) return thumb;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function fetchApifyTweetContext(

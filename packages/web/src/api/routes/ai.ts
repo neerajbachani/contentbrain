@@ -81,15 +81,24 @@ Additional rules when a creator perspective is provided:
 - The creator's voice and opinion should feel authentic in every variation`
     : "";
 
+  const memeBlock =
+    outputType === "meme"
+      ? `
+This is a MEME IDEA output. Each variation must describe a meme concept:
+- Format as top text / bottom text, OR a clear caption plus what the image should show
+- Do NOT write generic tweets or threads — every variation must be meme-ready
+- Keep text short enough to overlay on an image`
+      : "";
+
   const rulesBlock = userTake?.trim()
     ? `- Ground every variation in the creator's stated perspective above
 - Each variation must use a different execution: direct statement, story/example, provocative hook
 - Keep platform best practices in mind
-- Make it feel authentic, not AI-generated`
+- Make it feel authentic, not AI-generated${memeBlock}`
     : `- DO NOT copy the original — reimagine it with a fresh angle
 - Each variation must have a different hook/approach
 - Keep platform best practices in mind
-- Make it feel authentic, not AI-generated`;
+- Make it feel authentic, not AI-generated${memeBlock}`;
 
   const variationLabels = userTake?.trim()
     ? `    {
@@ -123,7 +132,7 @@ Additional rules when a creator perspective is provided:
       "why_it_works": "one line explanation"
     }`;
 
-  const prompt = `You are a viral content strategist. Take this inspiration and generate 3 unique content variations.
+    const prompt = `You are a viral content strategist. Apply these voice rules in every variation: use clear, direct language; avoid jargon, passive voice, and marketing hype; vary sentence length; use contractions naturally; sound warm and confident, like a friendly professional. Do not use emojis or em dashes. Take this inspiration and generate 3 unique content variations.
 
 Original inspiration:
 "${originalContent}"

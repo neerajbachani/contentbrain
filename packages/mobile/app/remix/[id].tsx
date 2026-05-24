@@ -1,10 +1,10 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, TextInput,
+  ActivityIndicator, TextInput, Image,
 } from "react-native";
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
@@ -14,9 +14,13 @@ import {
   ArrowLeftIcon, SparkleIcon, CopyIcon, ArrowClockwiseIcon, XIcon, PlusIcon,
 } from "phosphor-react-native";
 import ContextTab from "../../components/ContextTab";
+import PlatformPreview from "../../components/remix/PlatformPreview";
+import VariationSelector from "../../components/remix/VariationSelector";
+import MemeImageGrid from "../../components/remix/MemeImageGrid";
 import { useTheme, useThemedStyles } from "../../theme";
 import type { ThemeColors } from "../../theme/types";
 import { colors as paletteColors } from "../../theme/colors";
+import type { RemixVariation, MemePost, MemeSearchMeta, PlatformId } from "../../types/remix";
 
 const OUTPUT_TYPES = [
   { label: "Tweet", value: "tweet" },
@@ -45,6 +49,50 @@ const STYLES = [
 ];
 
 const TAKE_MAX_CHARS = 240;
+
+const VALID_PLATFORMS = new Set<string>(PLATFORMS.map((p) => p.value));
+const VALID_OUTPUT_TYPES = new Set<string>(OUTPUT_TYPES.map((t) => t.value));
+
+type SavedRemixRow = {
+  id: string;
+  inspirationIds?: string;
+  outputType: string;
+  outputContent: string;
+  platform?: string | null;
+  variations?: string;
+  selectedVariationIndex?: number;
+  imageUrl?: string | null;
+};
+
+function hydrateFromSavedRemix(remix: SavedRemixRow) {
+  let parsedVariations: RemixVariation[] = [];
+  try {
+    parsedVariations = JSON.parse(remix.variations || "[]");
+  } catch {
+    parsedVariations = [];
+  }
+
+  const outputType = remix.outputType.startsWith("merged_")
+    ? remix.outputType.slice("merged_".length)
+    : remix.outputType;
+
+  const platform =
+    remix.platform && remix.platform !== "multi" && VALID_PLATFORMS.has(remix.platform)
+      ? remix.platform
+      : "x";
+
+  const idx =
+    typeof remix.selectedVariationIndex === "number" ? remix.selectedVariationIndex : 0;
+
+  return {
+    remixId: remix.id,
+    variations: parsedVariations,
+    selectedVariationIndex: idx,
+    outputType: VALID_OUTPUT_TYPES.has(outputType) ? outputType : "tweet",
+    platform,
+    savedRemixImage: remix.imageUrl ?? null,
+  };
+}
 
 function makeStyles(theme: ThemeColors) {
   return StyleSheet.create({
@@ -84,7 +132,20 @@ function makeStyles(theme: ThemeColors) {
     fuelBadgeText: { color: theme.appBG, fontSize: 10, fontWeight: "700" },
 
     content: { padding: 16, gap: 16 },
-    sourceCard: { backgroundColor: theme.cardBG, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 8 },
+    sourceCard: {
+      backgroundColor: theme.cardBG,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: "hidden",
+      gap: 0,
+    },
+    sourceCardBody: { padding: 14, gap: 8 },
+    sourceThumbnail: {
+      width: "100%" as const,
+      height: 160,
+      backgroundColor: theme.highlightBG,
+    },
     sourceLabel: { color: theme.placeholderText, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
     sourceTitle: { color: theme.text, fontSize: 15, fontWeight: "600", lineHeight: 21 },
     styleBadge: { backgroundColor: theme.highlightBG, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
@@ -204,51 +265,36 @@ function makeStyles(theme: ThemeColors) {
     whyText: { color: theme.textSupporting, fontSize: 13 },
     copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: theme.success, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, alignSelf: "flex-start" },
     copyBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" },
+    previewSection: { gap: 12 },
   });
-}
-
-function VariationCard({ variation, index, styles, theme }: { variation: any; index: number; styles: ReturnType<typeof makeStyles>; theme: ThemeColors }) {
-  const labels = ["🔥 Variation 1", "⚡ Variation 2 — Different Angle", "✨ Variation 3 — Unique Twist"];
-
-  async function copy() {
-    await Clipboard.setStringAsync(variation.content);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
-  return (
-    <View style={styles.variationCard}>
-      <View style={styles.variationHeader}>
-        <Text style={styles.variationLabel}>{labels[index] ?? `Variation ${index + 1}`}</Text>
-        {variation.label && <Text style={styles.variationSubLabel}>{variation.label}</Text>}
-      </View>
-
-      <Text style={styles.variationContent}>{variation.content}</Text>
-
-      {variation.why_it_works && (
-        <View style={styles.whyBox}>
-          <Text style={styles.whyLabel}>Why it works</Text>
-          <Text style={styles.whyText}>{variation.why_it_works}</Text>
-        </View>
-      )}
-
-      <TouchableOpacity style={styles.copyBtn} onPress={copy}>
-        <CopyIcon size={14} color={theme.success} />
-        <Text style={styles.copyBtnText}>Copy</Text>
-      </TouchableOpacity>
-    </View>
-  );
 }
 
 export default function RemixStudioScreen() {
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const qc = useQueryClient();
+  const { id, remixId: remixIdParam } = useLocalSearchParams<{
+    id: string;
+    remixId?: string | string[];
+  }>();
+  const remixIdFromRoute = Array.isArray(remixIdParam) ? remixIdParam[0] : remixIdParam;
   const [activeTab, setActiveTab] = useState<"studio" | "context">("studio");
   const [outputType, setOutputType] = useState("tweet");
   const [platform, setPlatform] = useState("x");
   const [style, setStyle] = useState("casual");
-  const [variations, setVariations] = useState<any[]>([]);
+  const [variations, setVariations] = useState<RemixVariation[]>([]);
+  const [selectedVariationIndex, setSelectedVariationIndex] = useState(0);
+  const [remixId, setRemixId] = useState<string | null>(null);
+  const [savedRemixImage, setSavedRemixImage] = useState<string | null>(null);
+  const [remixLoadError, setRemixLoadError] = useState("");
+  const hydratedRemixIdRef = useRef<string | null>(null);
+  const [memePosts, setMemePosts] = useState<MemePost[]>([]);
+  const [memeSearchStatus, setMemeSearchStatus] = useState<"idle" | "loading" | "error" | "done">("idle");
+  const [memeSearchError, setMemeSearchError] = useState("");
+  const [memeRemaining, setMemeRemaining] = useState<number | undefined>();
+  const [memeMeta, setMemeMeta] = useState<MemeSearchMeta | undefined>();
+  const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState("");
   const [fuelItems, setFuelItems] = useState<string[]>([]);
   const [userTake, setUserTake] = useState("");
@@ -256,7 +302,7 @@ export default function RemixStudioScreen() {
   const [researchLoading, setResearchLoading] = useState(false);
   const [researchError, setResearchError] = useState("");
 
-  const { data: inspiration, isLoading } = useQuery({
+  const { data: inspiration, isLoading: inspirationLoading } = useQuery({
     queryKey: ["inspiration", id],
     queryFn: async () => {
       const res = await api.inspirations[":id"].$get({ param: { id: id! } });
@@ -264,7 +310,56 @@ export default function RemixStudioScreen() {
       return "inspiration" in d ? d.inspiration : null;
     },
     enabled: !!id,
+    staleTime: 0,
   });
+
+  const { data: savedRemix, isError: savedRemixError } = useQuery({
+    queryKey: ["remix", remixIdFromRoute],
+    queryFn: async () => {
+      const res = await api.remixes[":id"].$get({ param: { id: remixIdFromRoute! } });
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error((d as { message?: string }).message ?? "Remix not found");
+      }
+      return "remix" in d ? (d.remix as SavedRemixRow) : null;
+    },
+    enabled: !!remixIdFromRoute,
+    initialData: () => {
+      const list = qc.getQueryData<SavedRemixRow[]>(["remixes"]);
+      return list?.find((r) => r.id === remixIdFromRoute);
+    },
+    initialDataUpdatedAt: () => qc.getQueryState(["remixes"])?.dataUpdatedAt,
+  });
+
+  useEffect(() => {
+    hydratedRemixIdRef.current = null;
+    setSavedRemixImage(null);
+  }, [remixIdFromRoute]);
+
+  useEffect(() => {
+    if (!savedRemix || hydratedRemixIdRef.current === savedRemix.id) return;
+    const hydrated = hydrateFromSavedRemix(savedRemix);
+    hydratedRemixIdRef.current = savedRemix.id;
+    setRemixId(hydrated.remixId);
+    setVariations(hydrated.variations);
+    setSelectedVariationIndex(hydrated.selectedVariationIndex);
+    setOutputType(hydrated.outputType);
+    setPlatform(hydrated.platform);
+    setSavedRemixImage(hydrated.savedRemixImage);
+    setRemixLoadError("");
+  }, [savedRemix]);
+
+  useEffect(() => {
+    if (savedRemixError && remixIdFromRoute) {
+      setRemixLoadError("Could not load saved remix.");
+    }
+  }, [savedRemixError, remixIdFromRoute]);
+
+  useEffect(() => {
+    if (remixIdFromRoute && inspiration?.writingStyle) {
+      setStyle(inspiration.writingStyle);
+    }
+  }, [remixIdFromRoute, inspiration?.writingStyle]);
 
   const { data: profileData } = useQuery({
     queryKey: ["profile"],
@@ -278,6 +373,8 @@ export default function RemixStudioScreen() {
   const isPremium =
     (profileData as { isPremium?: boolean } | null)?.isPremium ??
     profileData?.profile?.plan === "premium";
+  const grokConnected =
+    (profileData as { grokConnected?: boolean } | null)?.grokConnected ?? false;
   const isXInspiration =
     inspiration?.sourcePlatform === "twitter" ||
     inspiration?.sourcePlatform === "x" ||
@@ -321,6 +418,35 @@ export default function RemixStudioScreen() {
     }
   }
 
+  const fetchMemes = useCallback(async () => {
+    if (!id || !grokConnected) return;
+    setMemeSearchStatus("loading");
+    setMemeSearchError("");
+    try {
+      const res = await api.x["meme-search"].$post({ json: { inspirationId: id } });
+      const d = await res.json();
+      if (!res.ok) {
+        if ((d as { grokRequired?: boolean }).grokRequired) {
+          setMemeSearchStatus("idle");
+          return;
+        }
+        throw new Error((d as { message?: string }).message ?? "Meme search failed");
+      }
+      const payload = d as {
+        memes?: MemePost[];
+        remainingToday?: number;
+        meta?: MemeSearchMeta;
+      };
+      setMemePosts(payload.memes ?? []);
+      setMemeRemaining(payload.remainingToday);
+      setMemeMeta(payload.meta);
+      setMemeSearchStatus("done");
+    } catch (err: unknown) {
+      setMemeSearchError(err instanceof Error ? err.message : "Meme search failed");
+      setMemeSearchStatus("error");
+    }
+  }, [id, grokConnected]);
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       const fuelContext = fuelItems.length > 0 ? fuelItems.join("\n\n") : undefined;
@@ -342,14 +468,66 @@ export default function RemixStudioScreen() {
     },
     onSuccess: (data: any) => {
       setVariations(data.variations ?? []);
+      setSelectedVariationIndex(0);
+      setRemixId(data.remix?.id ?? null);
+      hydratedRemixIdRef.current = data.remix?.id ?? null;
+      setSavedRemixImage(null);
+      setMemePosts([]);
+      setMemeMeta(undefined);
+      setMemeSearchStatus("idle");
       setError("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (outputType === "meme" && grokConnected) {
+        fetchMemes();
+      }
     },
     onError: (err: any) => {
       setError(err.message ?? "Generation failed");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
   });
+
+  const patchVariationMutation = useMutation({
+    mutationFn: async ({ remixId: rid, index }: { remixId: string; index: number }) => {
+      const res = await api.remixes[":id"].$patch({
+        param: { id: rid },
+        json: { selectedVariationIndex: index },
+      } as { param: { id: string }; json: { selectedVariationIndex: number } });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error((d as { message?: string }).message ?? "Could not save selection");
+      }
+    },
+  });
+
+  function schedulePatchSelection(index: number) {
+    if (!remixId) return;
+    if (patchTimer.current) clearTimeout(patchTimer.current);
+    patchTimer.current = setTimeout(() => {
+      patchVariationMutation.mutate({ remixId, index });
+    }, 400);
+  }
+
+  function handleSelectVariation(index: number) {
+    setSelectedVariationIndex(index);
+    schedulePatchSelection(index);
+  }
+
+  async function copySelected() {
+    const content = variations[selectedVariationIndex]?.content;
+    if (!content) return;
+    await Clipboard.setStringAsync(content);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (patchTimer.current) clearTimeout(patchTimer.current);
+    };
+  }, []);
+
+  const selectedContent = variations[selectedVariationIndex]?.content ?? "";
+  const previewImage = savedRemixImage ?? inspiration?.ogImage ?? null;
 
   function addFuel(text: string) {
     const normalized = text.replace(/\s+/g, " ").trim();
@@ -435,18 +613,33 @@ export default function RemixStudioScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {remixLoadError ? (
+            <Text style={{ color: theme.placeholderText, fontSize: 13 }}>{remixLoadError}</Text>
+          ) : null}
           {/* Original content */}
-          {isLoading ? (
+          {inspirationLoading ? (
             <ActivityIndicator color={theme.success} />
           ) : inspiration ? (
             <View style={styles.sourceCard}>
-              <Text style={styles.sourceLabel}>Original · {inspiration.sourcePlatform}</Text>
-              <Text style={styles.sourceTitle} numberOfLines={3}>{inspiration.title || inspiration.rawContent}</Text>
-              {inspiration.writingStyle && (
-                <View style={styles.styleBadge}>
-                  <Text style={styles.styleBadgeText}>Style: {inspiration.writingStyle}</Text>
-                </View>
-              )}
+              {inspiration.ogImage ? (
+                <Image
+                  source={{ uri: inspiration.ogImage }}
+                  style={styles.sourceThumbnail}
+                  resizeMode="cover"
+                  accessibilityLabel="Original post preview"
+                />
+              ) : null}
+              <View style={styles.sourceCardBody}>
+                <Text style={styles.sourceLabel}>Original · {inspiration.sourcePlatform}</Text>
+                <Text style={styles.sourceTitle} numberOfLines={3}>
+                  {inspiration.title || inspiration.rawContent}
+                </Text>
+                {inspiration.writingStyle && (
+                  <View style={styles.styleBadge}>
+                    <Text style={styles.styleBadgeText}>Style: {inspiration.writingStyle}</Text>
+                  </View>
+                )}
+              </View>
             </View>
           ) : null}
 
@@ -627,9 +820,43 @@ export default function RemixStudioScreen() {
                   <Text style={styles.regenBtnText}>Regenerate</Text>
                 </TouchableOpacity>
               </View>
-              {variations.map((v, i) => (
-                <VariationCard key={i} variation={v} index={i} styles={styles} theme={theme} />
-              ))}
+
+              <View style={styles.previewSection}>
+                <PlatformPreview
+                  platform={platform as PlatformId}
+                  content={selectedContent}
+                  imageUrl={previewImage}
+                />
+                <VariationSelector
+                  variations={variations}
+                  selectedIndex={selectedVariationIndex}
+                  onSelect={handleSelectVariation}
+                />
+                <TouchableOpacity style={styles.copyBtn} onPress={copySelected}>
+                  <CopyIcon size={14} color={theme.success} />
+                  <Text style={styles.copyBtnText}>Copy selected</Text>
+                </TouchableOpacity>
+                {variations[selectedVariationIndex]?.why_it_works && (
+                  <View style={styles.whyBox}>
+                    <Text style={styles.whyLabel}>Why it works</Text>
+                    <Text style={styles.whyText}>
+                      {variations[selectedVariationIndex].why_it_works}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {outputType === "meme" && (
+                <MemeImageGrid
+                  memes={memePosts}
+                  status={memeSearchStatus}
+                  errorMessage={memeSearchError}
+                  grokConnected={grokConnected}
+                  remainingToday={memeRemaining}
+                  meta={memeMeta}
+                  onRefresh={fetchMemes}
+                />
+              )}
             </View>
           )}
         </ScrollView>

@@ -1,4 +1,5 @@
-import { getLinkPreview, resolveXThumbnailOnly } from "../linkPreview/ogScraper";
+import { getLinkPreview } from "../linkPreview/ogScraper";
+import { resolveXPostMedia } from "./resolveXPostMedia";
 import { NICHE_KEYWORDS } from "../nicheData";
 import { normalizeTrend, TrendItem } from "../normalizer";
 import { isGenericXTitle, logTrends, xEnrichmentStats } from "../trendsLogger";
@@ -133,29 +134,31 @@ async function enrichXItems(items: TrendItem[]): Promise<TrendItem[]> {
       if (!item.url) return item;
 
       try {
-        const preview = await getLinkPreview(item.url);
-        let thumbnailUrl =
-          item.thumbnailUrl ?? preview.imageUrl ?? undefined;
+        const preview = isXUrl(item.url) ? null : await getLinkPreview(item.url);
+        let thumbnailUrl = item.thumbnailUrl ?? undefined;
 
-        if (!thumbnailUrl) {
-          thumbnailUrl = (await resolveXThumbnailOnly(item.url)) ?? undefined;
+        if (isXUrl(item.url)) {
+          const { imageUrl } = await resolveXPostMedia(item.url);
+          if (imageUrl) thumbnailUrl = imageUrl;
+        } else if (preview) {
+          thumbnailUrl = thumbnailUrl ?? preview.imageUrl ?? undefined;
         }
 
         const title = pickTitle(
           item.title,
           item.summary,
-          preview.title,
-          preview.description
+          preview?.title,
+          preview?.description
         );
         const summary =
           sanitizeXText(item.summary) ||
-          sanitizeXText(preview.description) ||
+          sanitizeXText(preview?.description) ||
           undefined;
 
         const author =
           item.author && item.author !== "X"
             ? item.author
-            : preview.title?.trim() || "X";
+            : preview?.title?.trim() || "X";
 
         if (!thumbnailUrl) {
           logTrends("x_enrich_no_thumbnail", { url: item.url }, "warn");

@@ -2,6 +2,7 @@ import type { ContextComment, ContextPost } from "../context/redditContext";
 import { parseEngagementFromText } from "./xEngagement";
 import { sanitizeXText } from "./xTextSanitizer";
 import { logXContext } from "./logger";
+import type { XContextIntent } from "./types";
 
 function extractUrlsFromText(text: string): string[] {
   const matches = text.match(/https?:\/\/(?:twitter\.com|x\.com)\/\S+/gi) ?? [];
@@ -277,7 +278,10 @@ function mergePosts(posts: ContextPost[]): ContextPost[] {
   return [...byUrl.values()];
 }
 
-export function parseXaiResponsesPayload(data: any): {
+export function parseXaiResponsesPayload(
+  data: any,
+  intent?: XContextIntent
+): {
   comments: ContextComment[];
   relatedPosts: ContextPost[];
 } {
@@ -333,7 +337,17 @@ export function parseXaiResponsesPayload(data: any): {
     urlOnly,
     textEnriched,
     withThumbnail,
+    intent: intent ?? "unknown",
   });
+
+  if (intent === "meme_search" && dedupedPosts.length > 0 && withThumbnail === 0) {
+    logXaiOutputStructure(data);
+    logXContext(
+      "meme_search_zero_thumbnails_parse",
+      { postCount: dedupedPosts.length },
+      "warn"
+    );
+  }
 
   return { comments, relatedPosts: dedupedPosts };
 }
