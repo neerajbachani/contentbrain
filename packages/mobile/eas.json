@@ -12,10 +12,10 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
       "env": {
-  "EXPO_PUBLIC_API_URL": "https://enclosed-stump344.runable.site"
-}
+          "EXPO_PUBLIC_API_URL": "https://enclosed-stump344.runable.site"
+      }
 
 
     },
