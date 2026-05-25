@@ -45,9 +45,6 @@ const server = Bun.serve({
 
 console.log(`Web server listening on http://localhost:${server.port}`);
 
-// Pre-warm API module after server is listening
-getApp().catch(console.error);
-
 function getStaticFilePath(pathname: string) {
   const cleanPath = decodeURIComponent(pathname)
     .replace(/^\/+/, "")

@@ -4,5 +4,6 @@
     "description": "AI-powered content trends and inspiration platform",
     "url": "https://example.com",
     "hostname": "xyz.runable.site",
-    "port": 4200
+    "port": 4200,
+    "timeoutMs": 120000
 }
