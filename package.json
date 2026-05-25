@@ -15,7 +15,9 @@
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
-    "db:studio": "turbo db:studio"
+    "db:studio": "turbo db:studio",
+    "start": "cd packages/web && bunx vite --port 8080 --host",
+    "start:web": "cd packages/web && bunx vite --port 8080 --host"
   },
   "devDependencies": {
     "@tursodatabase/api": "^1.9.2",
