@@ -16,14 +16,17 @@ export function startScheduler() {
 
   logTrends("scheduler_bootstrap", { apifyX: apifyXEnabled });
   console.log(
-    `[Scheduler] Running startup bootstrap fetch... (Apify X: ${apifyXEnabled ? "on" : "off"})`
+    `[Scheduler] Bootstrap fetch scheduled in 10s... (Apify X: ${apifyXEnabled ? "on" : "off"})`
   );
-  runTrendJob({
-    niches: BOOTSTRAP_NICHES,
-    includeNewsData: true,
-    includeApify: apifyXEnabled,
-    maxItemsPerPlatform: 10,
-  }).catch(console.error);
+  // Delay bootstrap so the server finishes starting before running network jobs
+  setTimeout(() => {
+    runTrendJob({
+      niches: BOOTSTRAP_NICHES,
+      includeNewsData: true,
+      includeApify: apifyXEnabled,
+      maxItemsPerPlatform: 10,
+    }).catch(console.error);
+  }, 10_000);
 
   // Google RSS every 15 minutes (free, zero-cost)
   setInterval(
