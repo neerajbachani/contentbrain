@@ -3,21 +3,21 @@
   "private": true,
   "packageManager": "bun@1.3.5",
   "workspaces": [
-    "packages/web"
+    "packages/*"
   ],
   "scripts": {
-    "dev": "cd packages/web && bunx vite",
+    "dev": "bun run --cwd packages/web node_modules/.bin/vite",
     "dev:desktop": "cd packages/desktop && bunx vite",
     "dev:mobile": "cd packages/mobile && bunx expo start",
     "build": "turbo build",
-    "build:web": "cd packages/web && bunx vite build",
+    "build:web": "bun run --cwd packages/web node_modules/.bin/vite build",
     "typecheck": "turbo typecheck",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
     "db:studio": "turbo db:studio",
-    "start": "cd packages/web && bunx vite --port 8080 --host",
-    "start:web": "cd packages/web && bunx vite --port 8080 --host"
+    "start": "bun run --cwd packages/web node_modules/.bin/vite --port 8080 --host",
+    "start:web": "bun run --cwd packages/web node_modules/.bin/vite --port 8080 --host"
   },
   "devDependencies": {
     "@tursodatabase/api": "^1.9.2",
