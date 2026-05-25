@@ -7,6 +7,7 @@ import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
 import { authClient, clearToken } from "../../lib/auth";
+import { apiRequest, formatApiError } from "../../lib/http";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -62,6 +63,7 @@ function makeSettingsStyles(theme: ThemeColors) {
     },
     userName: { color: theme.text },
     userEmail: { color: theme.textSupporting, fontSize: variables.fontSizeLabel },
+    errorText: { color: theme.danger, fontSize: variables.fontSizeLabel, lineHeight: 18 },
     planBadge: {
       backgroundColor: theme.highlightBG,
       paddingHorizontal: 10,
@@ -174,12 +176,28 @@ export default function SettingsScreen() {
   const [grokToken, setGrokToken] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error: profileError } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const res = await api.users.profile.$get();
-      const d = await res.json();
-      return "user" in d ? d : null;
+      return apiRequest<{
+        user: { id: string; name: string | null; email: string | null; image: string | null };
+        profile: {
+          niche?: string | null;
+          plan?: string | null;
+          xDataSource?: string | null;
+          remixCount?: number | null;
+          mergeCount?: number | null;
+          trendCount?: number | null;
+        };
+        grokConnected?: boolean;
+        isPremium?: boolean;
+        limits?: {
+          inspirations?: number | null;
+          dailyRemixes?: number | null;
+          dailyMerges?: number | null;
+          dailyTrends?: number | null;
+        };
+      }>("GET", "/api/users/profile", () => api.users.profile.$get());
     },
   });
 
@@ -210,15 +228,17 @@ export default function SettingsScreen() {
   const isPremium = (data as { isPremium?: boolean })?.isPremium ?? profile?.plan === "premium";
   const xDataSource = (profile as { xDataSource?: string })?.xDataSource ?? "auto";
   const grokConnected = (data as { grokConnected?: boolean })?.grokConnected ?? false;
+  const profileErrorMessage = profileError ? formatApiError(profileError, "Could not load profile") : "";
 
   async function updateXDataSource(value: string) {
     try {
-      const res = await api.users.settings.$patch({ json: { xDataSource: value } });
-      if (!res.ok) throw new Error("Failed");
+      await apiRequest("PATCH", "/api/users/settings", () =>
+        api.users.settings.$patch({ json: { xDataSource: value } })
+      );
       await qc.invalidateQueries({ queryKey: ["profile"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Could not update X data source");
+    } catch (err: unknown) {
+      Alert.alert("Error", formatApiError(err, "Could not update X data source"));
     }
   }
 
@@ -229,13 +249,14 @@ export default function SettingsScreen() {
     }
     setConnecting(true);
     try {
-      const res = await api.integrations.xai.connect.$post({
-        json: { accessToken: grokToken.trim() },
-      });
-      const body = (await res.json()) as { message?: string; verified?: boolean };
-      if (!res.ok) {
-        throw new Error(body.message ?? `HTTP ${res.status}`);
-      }
+      const body = await apiRequest<{ message?: string; verified?: boolean; connected?: boolean }>(
+        "POST",
+        "/api/integrations/xai/connect",
+        () =>
+          api.integrations.xai.connect.$post({
+            json: { accessToken: grokToken.trim() },
+          })
+      );
       setGrokToken("");
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.invalidateQueries({ queryKey: ["inspirations"] });
@@ -247,8 +268,7 @@ export default function SettingsScreen() {
           : "Grok is ready for live X search"
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Could not connect Grok";
-      Alert.alert("Grok connection failed", msg);
+      Alert.alert("Grok connection failed", formatApiError(err, "Could not connect Grok"));
     } finally {
       setConnecting(false);
     }
@@ -256,11 +276,13 @@ export default function SettingsScreen() {
 
   async function disconnectGrok() {
     try {
-      await api.integrations.xai.disconnect.$delete();
+      await apiRequest("DELETE", "/api/integrations/xai/disconnect", () =>
+        api.integrations.xai.disconnect.$delete()
+      );
       await qc.invalidateQueries({ queryKey: ["profile"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Could not disconnect");
+    } catch (err: unknown) {
+      Alert.alert("Error", formatApiError(err, "Could not disconnect"));
     }
   }
 
@@ -270,6 +292,9 @@ export default function SettingsScreen() {
         <Text preset="headline" style={styles.headerTitle}>
           Settings
         </Text>
+        {profileErrorMessage ? (
+          <Text style={styles.errorText}>{profileErrorMessage}</Text>
+        ) : null}
 
         {isLoading ? (
           <ActivityIndicator color={theme.success} style={{ marginTop: 40 }} />

@@ -1,6 +1,6 @@
 import {
   View, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Linking, ScrollView, Image,
+  ActivityIndicator, RefreshControl, Linking, ScrollView, Image, Alert,
 } from "react-native";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { useTheme, useThemedStyles } from "../../theme";
 import { colors } from "../../constants/colors";
 import { Text } from "../../components/ui";
 import { api } from "../../lib/api";
+import { ApiResponseError, apiRequest, formatApiError } from "../../lib/http";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -264,63 +265,83 @@ export default function TrendingScreen() {
   const styles = useThemedStyles(makeTrendingStyles);
   const [selectedNiche, setSelectedNiche] = useState("tech");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, error: trendsError } = useQuery({
     queryKey: ["trends", selectedNiche],
     queryFn: async () => {
-      const res = await api.trends.$get({ query: { niche: selectedNiche } });
-      const d = await res.json() as any;
-      if (res.status === 403 && d?.limitReached) {
+      try {
+        const d = await apiRequest<any>("GET", `/api/trends?niche=${selectedNiche}`, () =>
+          api.trends.$get({ query: { niche: selectedNiche } })
+        );
         return {
-          trends: [] as TrendRow[],
-          todayXNews: [] as TodayXNewsGroup[],
-          limitReached: true,
-          message: d.message ?? "Daily trend limit reached. Upgrade to Premium.",
+          trends: (d?.trends ?? []) as TrendRow[],
+          todayXNews: (d?.todayXNews ?? []) as TodayXNewsGroup[],
+          limitReached: false,
+          message: "",
         };
+      } catch (err) {
+        if (
+          err instanceof ApiResponseError &&
+          err.status === 403 &&
+          err.body &&
+          typeof err.body === "object" &&
+          "limitReached" in err.body
+        ) {
+          const body = err.body as { message?: string; limitReached?: boolean };
+          return {
+            trends: [] as TrendRow[],
+            todayXNews: [] as TodayXNewsGroup[],
+            limitReached: true,
+            message: body.message ?? "Daily trend limit reached. Upgrade to Premium.",
+          };
+        }
+        throw err;
       }
-      return {
-        trends: (d?.trends ?? []) as TrendRow[],
-        todayXNews: (d?.todayXNews ?? []) as TodayXNewsGroup[],
-        limitReached: false,
-        message: "",
-      };
     },
   });
 
   const addToCanvas = useMutation({
     mutationFn: async (item: TrendRow) => {
-      await api.inspirations.$post({
-        json: {
-          rawContent: `${stripMarkdown(item.title)}\n\n${displaySummary(item) || ""}`,
-          sourceUrl: item.url,
-          sourcePlatform: item.platform,
-          type: "text",
-          title: stripMarkdown(item.title),
-          ogImage: item.thumbnailUrl ?? null,
-        },
-      });
+      await apiRequest("POST", "/api/inspirations", () =>
+        api.inspirations.$post({
+          json: {
+            rawContent: `${stripMarkdown(item.title)}\n\n${displaySummary(item) || ""}`,
+            sourceUrl: item.url,
+            sourcePlatform: item.platform,
+            type: "text",
+            title: stripMarkdown(item.title),
+            ogImage: item.thumbnailUrl ?? null,
+          },
+        })
+      );
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inspirations"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
+    onError: (err) => Alert.alert("Add to canvas failed", formatApiError(err, "Could not save trend")),
   });
 
   const handleRemix = async (item: TrendRow) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const res = await api.inspirations.$post({
-      json: {
-        rawContent: `${stripMarkdown(item.title)}\n\n${displaySummary(item) || ""}`,
-        sourceUrl: item.url,
-        sourcePlatform: item.platform,
-        type: "text",
-        title: stripMarkdown(item.title),
-        ogImage: item.thumbnailUrl ?? null,
-      },
-    });
-    const d = await res.json();
-    if ("inspiration" in d) {
-      qc.invalidateQueries({ queryKey: ["inspirations"] });
-      router.push(`/remix/${d.inspiration.id}`);
+    try {
+      const d = await apiRequest<{ inspiration?: { id: string } }>("POST", "/api/inspirations", () =>
+        api.inspirations.$post({
+          json: {
+            rawContent: `${stripMarkdown(item.title)}\n\n${displaySummary(item) || ""}`,
+            sourceUrl: item.url,
+            sourcePlatform: item.platform,
+            type: "text",
+            title: stripMarkdown(item.title),
+            ogImage: item.thumbnailUrl ?? null,
+          },
+        })
+      );
+      if ("inspiration" in d && d.inspiration?.id) {
+        qc.invalidateQueries({ queryKey: ["inspirations"] });
+        router.push(`/remix/${d.inspiration.id}`);
+      }
+    } catch (err) {
+      Alert.alert("Remix failed", formatApiError(err, "Could not create remix source"));
     }
   };
 
@@ -328,6 +349,7 @@ export default function TrendingScreen() {
   const todayXNews = data?.todayXNews ?? [];
   const limitReached = data?.limitReached ?? false;
   const limitMessage = data?.message ?? "Daily trend limit reached. Upgrade to Premium.";
+  const trendsErrorMessage = trendsError ? formatApiError(trendsError, "Could not load trends") : "";
 
   const ListHeader = (
     <>
@@ -370,6 +392,12 @@ export default function TrendingScreen() {
         <View style={styles.limitBanner}>
           <Text style={styles.limitBannerTitle}>Daily trend limit reached</Text>
           <Text style={styles.limitBannerText}>{limitMessage}</Text>
+        </View>
+      ) : null}
+      {trendsErrorMessage ? (
+        <View style={styles.limitBanner}>
+          <Text style={styles.limitBannerTitle}>Trend load failed</Text>
+          <Text style={styles.limitBannerText}>{trendsErrorMessage}</Text>
         </View>
       ) : null}
 

@@ -11,6 +11,7 @@ import {
 import { getApiAuthHeaders } from "../lib/auth";
 import { api } from "../lib/api";
 import { getApiBase } from "../lib/apiBase";
+import { apiRequest, formatApiError } from "../lib/http";
 import { useTheme, useThemedStyles } from "../theme";
 import { colors as paletteColors } from "../theme/colors";
 import { variables } from "../theme/variables";
@@ -310,18 +311,14 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     setError("");
     try {
       const base = getApiBase();
-      const res = await fetch(`${base}/api/inspirations/${inspirationId}/context`, {
-        headers: getApiAuthHeaders(),
-      });
-      const json = (await res.json()) as ContextData;
-      if (!res.ok) {
-        const msg = json.message ?? json.error ?? `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
+      const json = await apiRequest<ContextData>("GET", `/api/inspirations/${inspirationId}/context`, () =>
+        fetch(`${base}/api/inspirations/${inspirationId}/context`, {
+          headers: getApiAuthHeaders(),
+        })
+      );
       setData(json);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Could not load context";
-      setError(msg);
+      setError(formatApiError(err, "Could not load context"));
     } finally {
       setLoading(false);
     }
@@ -336,14 +333,16 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     if (savedIds.has(key)) return;
     setSavedIds((prev) => new Set(prev).add(key));
     try {
-      await api.inspirations.$post({
-        json: {
-          rawContent: text,
-          sourcePlatform: platform,
-          sourceUrl: sourceUrl ?? null,
-          type: "text",
-        },
-      });
+      await apiRequest("POST", "/api/inspirations", () =>
+        api.inspirations.$post({
+          json: {
+            rawContent: text,
+            sourcePlatform: platform,
+            sourceUrl: sourceUrl ?? null,
+            type: "text",
+          },
+        })
+      );
       qc.invalidateQueries({ queryKey: ["inspirations"] });
       onSaveToCanvas(text, platform);
     } catch {

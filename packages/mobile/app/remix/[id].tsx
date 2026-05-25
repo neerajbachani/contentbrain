@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
+import { apiRequest, formatApiError } from "../../lib/http";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -305,8 +306,9 @@ export default function RemixStudioScreen() {
   const { data: inspiration, isLoading: inspirationLoading } = useQuery({
     queryKey: ["inspiration", id],
     queryFn: async () => {
-      const res = await api.inspirations[":id"].$get({ param: { id: id! } });
-      const d = await res.json();
+      const d = await apiRequest<{ inspiration?: any }>("GET", `/api/inspirations/${id!}`, () =>
+        api.inspirations[":id"].$get({ param: { id: id! } })
+      );
       return "inspiration" in d ? d.inspiration : null;
     },
     enabled: !!id,
@@ -316,11 +318,9 @@ export default function RemixStudioScreen() {
   const { data: savedRemix, isError: savedRemixError } = useQuery({
     queryKey: ["remix", remixIdFromRoute],
     queryFn: async () => {
-      const res = await api.remixes[":id"].$get({ param: { id: remixIdFromRoute! } });
-      const d = await res.json();
-      if (!res.ok) {
-        throw new Error((d as { message?: string }).message ?? "Remix not found");
-      }
+      const d = await apiRequest<{ remix?: SavedRemixRow }>("GET", `/api/remixes/${remixIdFromRoute!}`, () =>
+        api.remixes[":id"].$get({ param: { id: remixIdFromRoute! } })
+      );
       return "remix" in d ? (d.remix as SavedRemixRow) : null;
     },
     enabled: !!remixIdFromRoute,
@@ -351,7 +351,7 @@ export default function RemixStudioScreen() {
 
   useEffect(() => {
     if (savedRemixError && remixIdFromRoute) {
-      setRemixLoadError("Could not load saved remix.");
+      setRemixLoadError(formatApiError(savedRemixError, "Could not load saved remix."));
     }
   }, [savedRemixError, remixIdFromRoute]);
 
@@ -364,8 +364,7 @@ export default function RemixStudioScreen() {
   const { data: profileData } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const res = await api.users.profile.$get();
-      const d = await res.json();
+      const d = await apiRequest<any>("GET", "/api/users/profile", () => api.users.profile.$get());
       return "profile" in d ? d : null;
     },
   });
@@ -391,11 +390,9 @@ export default function RemixStudioScreen() {
     setResearchLoading(true);
     setResearchError("");
     try {
-      const res = await api.x.research.$post({ json: { inspirationId: id } });
-      const d = await res.json();
-      if (!res.ok) {
-        throw new Error((d as any).message ?? "Research failed");
-      }
+      const d = await apiRequest<any>("POST", "/api/x/research", () =>
+        api.x.research.$post({ json: { inspirationId: id } })
+      );
       const posts = (d as any).relatedPosts ?? [];
       const comments = (d as any).comments ?? [];
       const items: string[] = [];
@@ -411,8 +408,8 @@ export default function RemixStudioScreen() {
       }
       items.slice(0, 6).forEach((text) => addFuel(text));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err: any) {
-      setResearchError(err.message ?? "Research failed");
+    } catch (err: unknown) {
+      setResearchError(formatApiError(err, "Research failed"));
     } finally {
       setResearchLoading(false);
     }
@@ -423,26 +420,19 @@ export default function RemixStudioScreen() {
     setMemeSearchStatus("loading");
     setMemeSearchError("");
     try {
-      const res = await api.x["meme-search"].$post({ json: { inspirationId: id } });
-      const d = await res.json();
-      if (!res.ok) {
-        if ((d as { grokRequired?: boolean }).grokRequired) {
-          setMemeSearchStatus("idle");
-          return;
-        }
-        throw new Error((d as { message?: string }).message ?? "Meme search failed");
-      }
-      const payload = d as {
+      const payload = await apiRequest<{
         memes?: MemePost[];
         remainingToday?: number;
         meta?: MemeSearchMeta;
-      };
+      }>("POST", "/api/x/meme-search", () =>
+        api.x["meme-search"].$post({ json: { inspirationId: id } })
+      );
       setMemePosts(payload.memes ?? []);
       setMemeRemaining(payload.remainingToday);
       setMemeMeta(payload.meta);
       setMemeSearchStatus("done");
     } catch (err: unknown) {
-      setMemeSearchError(err instanceof Error ? err.message : "Meme search failed");
+      setMemeSearchError(formatApiError(err, "Meme search failed"));
       setMemeSearchStatus("error");
     }
   }, [id, grokConnected]);
@@ -450,21 +440,18 @@ export default function RemixStudioScreen() {
   const generateMutation = useMutation({
     mutationFn: async () => {
       const fuelContext = fuelItems.length > 0 ? fuelItems.join("\n\n") : undefined;
-      const res = await api.remixes.generate.$post({
-        json: {
-          inspirationId: id,
-          outputType,
-          targetPlatform: platform,
-          style,
-          fuelContext,
-          userTake: trimmedTake || undefined,
-        } as any,
-      });
-      const d = await res.json();
-      if (res.status === 403) {
-        throw new Error((d as any).message ?? "Limit reached");
-      }
-      return d;
+      return apiRequest<any>("POST", "/api/remixes/generate", () =>
+        api.remixes.generate.$post({
+          json: {
+            inspirationId: id,
+            outputType,
+            targetPlatform: platform,
+            style,
+            fuelContext,
+            userTake: trimmedTake || undefined,
+          } as any,
+        })
+      );
     },
     onSuccess: (data: any) => {
       setVariations(data.variations ?? []);
@@ -481,22 +468,20 @@ export default function RemixStudioScreen() {
         fetchMemes();
       }
     },
-    onError: (err: any) => {
-      setError(err.message ?? "Generation failed");
+    onError: (err: unknown) => {
+      setError(formatApiError(err, "Generation failed"));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
   });
 
   const patchVariationMutation = useMutation({
     mutationFn: async ({ remixId: rid, index }: { remixId: string; index: number }) => {
-      const res = await api.remixes[":id"].$patch({
-        param: { id: rid },
-        json: { selectedVariationIndex: index },
-      } as { param: { id: string }; json: { selectedVariationIndex: number } });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error((d as { message?: string }).message ?? "Could not save selection");
-      }
+      await apiRequest("PATCH", `/api/remixes/${rid}`, () =>
+        api.remixes[":id"].$patch({
+          param: { id: rid },
+          json: { selectedVariationIndex: index },
+        } as { param: { id: string }; json: { selectedVariationIndex: number } })
+      );
     },
   });
 

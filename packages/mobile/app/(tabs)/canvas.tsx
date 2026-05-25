@@ -13,6 +13,7 @@ import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import { getApiBase } from "../../lib/apiBase";
 import { getApiAuthHeaders } from "../../lib/auth";
+import { apiRequest, formatApiError } from "../../lib/http";
 import { useCanvasStore, type CanvasRecord, type NodeLayout } from "../../store/canvasStore";
 import { useTheme, useThemedStyles } from "../../theme";
 import type { ThemeColors } from "../../theme/types";
@@ -91,6 +92,14 @@ function makeStyles(theme: ThemeColors) {
     undoBtn: { color: theme.success, fontWeight: "700", fontSize: 13 },
     boardShell: { flex: 1 },
     headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+    errorBanner: {
+      backgroundColor: `${theme.danger}20`,
+      color: theme.danger,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginBottom: 12,
+    },
   });
 }
 
@@ -137,27 +146,38 @@ export default function CanvasScreen() {
     setLastDeleted,
   } = useCanvasStore();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching, error: inspirationsError } = useQuery({
     queryKey: ["inspirations"],
     queryFn: async () => {
-      const res = await api.inspirations.$get();
-      const d = await res.json();
+      const d = await apiRequest<{ inspirations: Record<string, unknown>[] }>(
+        "GET",
+        "/api/inspirations",
+        () => api.inspirations.$get()
+      );
       const raw = "inspirations" in d ? d.inspirations : [];
       return (raw as Record<string, unknown>[]).map(normalizeInspiration);
     },
   });
 
-  const { data: canvasesData } = useQuery({
+  const { data: canvasesData, error: canvasesError } = useQuery({
     queryKey: ["canvases"],
     queryFn: async () => {
-      const res = await api.canvases.$get();
-      const d = await res.json();
+      const d = await apiRequest<{ canvases: CanvasRecord[] }>(
+        "GET",
+        "/api/canvases",
+        () => api.canvases.$get()
+      );
       return ("canvases" in d ? d.canvases : []) as CanvasRecord[];
     },
   });
 
   const canvases = canvasesData ?? [];
   const activeCanvas = canvases.find((c) => c.id === activeCanvasId) ?? canvases[0] ?? null;
+  const canvasErrorMessage = inspirationsError
+    ? formatApiError(inspirationsError, "Could not load inspirations")
+    : canvasesError
+      ? formatApiError(canvasesError, "Could not load canvases")
+      : "";
 
   useEffect(() => {
     if (activeCanvas && !activeCanvasId) {
@@ -190,65 +210,77 @@ export default function CanvasScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.inspirations[":id"].$delete({ param: { id } });
+      await apiRequest("DELETE", `/api/inspirations/${id}`, () =>
+        api.inspirations[":id"].$delete({ param: { id } })
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inspirations"] }),
+    onError: (err) => Alert.alert("Delete failed", formatApiError(err, "Could not delete inspiration")),
   });
 
   const restoreMutation = useMutation({
     mutationFn: async (item: ReturnType<typeof normalizeInspiration>) => {
-      await api.inspirations.$post({
-        json: {
-          rawContent: item.rawContent,
-          sourceUrl: item.sourceUrl,
-          sourcePlatform: item.sourcePlatform,
-          type: item.type,
-          title: item.title,
-          ogImage: item.ogImage,
-        },
-      });
+      await apiRequest("POST", "/api/inspirations", () =>
+        api.inspirations.$post({
+          json: {
+            rawContent: item.rawContent,
+            sourceUrl: item.sourceUrl,
+            sourcePlatform: item.sourcePlatform,
+            type: item.type,
+            title: item.title,
+            ogImage: item.ogImage,
+          },
+        })
+      );
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inspirations"] });
       setLastDeleted(null);
     },
+    onError: (err) => Alert.alert("Restore failed", formatApiError(err, "Could not restore inspiration")),
   });
 
   const layoutMutation = useMutation({
     mutationFn: async ({ canvasId, layout }: { canvasId: string; layout: Record<string, NodeLayout> }) => {
-      const res = await fetch(`${getApiBase()}/api/canvases/${canvasId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...getApiAuthHeaders(),
-        },
-        body: JSON.stringify({ layoutJson: JSON.stringify(layout) }),
-      });
-      if (!res.ok) throw new Error("Failed to save layout");
+      await apiRequest("PATCH", `/api/canvases/${canvasId}`, () =>
+        fetch(`${getApiBase()}/api/canvases/${canvasId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...getApiAuthHeaders(),
+          },
+          body: JSON.stringify({ layoutJson: JSON.stringify(layout) }),
+        })
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["canvases"] }),
+    onError: (err) => Alert.alert("Canvas save failed", formatApiError(err, "Could not save canvas layout")),
   });
 
   const createCanvasMutation = useMutation({
     mutationFn: async (name: string) => {
-      const res = await api.canvases.$post({
-        json: {
-          name,
-          inspirationIds: (data ?? []).map((i) => i.id),
-        },
-      });
-      return res.json();
+      return apiRequest<{ canvas?: CanvasRecord }>("POST", "/api/canvases", () =>
+        api.canvases.$post({
+          json: {
+            name,
+            inspirationIds: (data ?? []).map((i) => i.id),
+          },
+        })
+      );
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["canvases"] });
       const canvas = (result as { canvas?: CanvasRecord }).canvas;
       if (canvas?.id) setActiveCanvasId(canvas.id);
     },
+    onError: (err) => Alert.alert("Create canvas failed", formatApiError(err, "Could not create canvas")),
   });
 
   const refreshClusters = useCallback(async () => {
     if (!activeCanvas?.id || !showClusters) return;
-    await api.canvases[":id"].clusters.$get({ param: { id: activeCanvas.id } });
+    await apiRequest("GET", `/api/canvases/${activeCanvas.id}/clusters`, () =>
+      api.canvases[":id"].clusters.$get({ param: { id: activeCanvas.id } })
+    );
     qc.invalidateQueries({ queryKey: ["canvases"] });
   }, [activeCanvas?.id, showClusters, qc]);
 
@@ -395,6 +427,9 @@ export default function CanvasScreen() {
 
   const listHeader = (
     <>
+      {canvasErrorMessage ? (
+        <Text style={styles.errorBanner}>{canvasErrorMessage}</Text>
+      ) : null}
       {viewMode !== "board" && canvases.length > 0 ? (
         <CanvasPicker
           canvases={canvases}

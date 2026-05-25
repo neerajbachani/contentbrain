@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
+import { apiRequest, formatApiError } from "../../lib/http";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
@@ -56,6 +57,7 @@ function makeStyles(theme: ThemeColors) {
     actionBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" },
     badge: { backgroundColor: theme.highlightBG, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
     badgeText: { color: theme.textSupporting, fontSize: 11, fontWeight: "600" },
+    errorText: { color: theme.danger, fontSize: 13, paddingHorizontal: 16, marginBottom: 8 },
   });
 }
 
@@ -153,8 +155,9 @@ export default function LibraryScreen() {
   const inspirations = useQuery({
     queryKey: ["inspirations"],
     queryFn: async () => {
-      const res = await api.inspirations.$get();
-      const d = await res.json();
+      const d = await apiRequest<{ inspirations: any[] }>("GET", "/api/inspirations", () =>
+        api.inspirations.$get()
+      );
       return "inspirations" in d ? d.inspirations : [];
     },
   });
@@ -162,24 +165,35 @@ export default function LibraryScreen() {
   const remixes = useQuery({
     queryKey: ["remixes"],
     queryFn: async () => {
-      const res = await api.remixes.$get();
-      const d = await res.json();
+      const d = await apiRequest<{ remixes: any[] }>("GET", "/api/remixes", () =>
+        api.remixes.$get()
+      );
       return "remixes" in d ? d.remixes : [];
     },
   });
 
   const deleteInspiration = useMutation({
-    mutationFn: async (id: string) => api.inspirations[":id"].$delete({ param: { id } }),
+    mutationFn: async (id: string) =>
+      apiRequest("DELETE", `/api/inspirations/${id}`, () =>
+        api.inspirations[":id"].$delete({ param: { id } })
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inspirations"] }),
+    onError: (err) => Alert.alert("Delete failed", formatApiError(err, "Could not delete inspiration")),
   });
 
   const deleteRemix = useMutation({
-    mutationFn: async (id: string) => api.remixes[":id"].$delete({ param: { id } }),
+    mutationFn: async (id: string) =>
+      apiRequest("DELETE", `/api/remixes/${id}`, () =>
+        api.remixes[":id"].$delete({ param: { id } })
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["remixes"] }),
+    onError: (err) => Alert.alert("Delete failed", formatApiError(err, "Could not delete remix")),
   });
 
   const isLoading = activeTab === "Inspirations" ? inspirations.isLoading : remixes.isLoading;
   const data = (activeTab === "Inspirations" ? inspirations.data : remixes.data) ?? [];
+  const activeError = activeTab === "Inspirations" ? inspirations.error : remixes.error;
+  const errorMessage = activeError ? formatApiError(activeError, `Could not load ${activeTab.toLowerCase()}`) : "";
 
   function confirmDelete(id: string, type: Tab) {
     Alert.alert("Delete", `Remove this ${type === "Inspirations" ? "inspiration" : "remix"}?`, [
@@ -212,6 +226,7 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
       {isLoading ? (
         <View style={styles.centered}>

@@ -10,6 +10,7 @@ import { useTheme, useThemedStyles } from "../../theme";
 import type { ThemeColors } from "../../theme/types";
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
+import { apiRequest, formatApiError } from "../../lib/http";
 import { useCanvasStore } from "../../store/canvasStore";
 import { detectPlatformFromUrl } from "./canvasUtils";
 
@@ -123,8 +124,9 @@ export default function AddContentModal({ visible, initialUrl, initialText, onCl
           removePendingId(pendingId);
           return;
         }
-        const res = await api.scrape.$post({ json: { url } });
-        const data = await res.json();
+        const data = await apiRequest<Record<string, string>>("POST", "/api/scrape", () =>
+          api.scrape.$post({ json: { url } })
+        );
         if ("title" in data) {
           ogData = data as Record<string, string>;
           rawContent = `${data.title}\n\n${data.description || ""}`;
@@ -138,24 +140,18 @@ export default function AddContentModal({ visible, initialUrl, initialText, onCl
         return;
       }
 
-      const res = await api.inspirations.$post({
-        json: {
-          rawContent: rawContent.trim(),
-          sourceUrl: mode === "url" ? url : null,
-          sourcePlatform: platform,
-          type: "text",
-          title: ogData.title || null,
-          ogImage: ogData.imageUrl || null,
-        },
-      });
-
-      const data = await res.json();
-      if (res.status === 403) {
-        setError((data as { message?: string }).message ?? "Limit reached");
-        setLoading(false);
-        removePendingId(pendingId);
-        return;
-      }
+      await apiRequest("POST", "/api/inspirations", () =>
+        api.inspirations.$post({
+          json: {
+            rawContent: rawContent.trim(),
+            sourceUrl: mode === "url" ? url : null,
+            sourcePlatform: platform,
+            type: "text",
+            title: ogData.title || null,
+            ogImage: ogData.imageUrl || null,
+          },
+        })
+      );
 
       await qc.invalidateQueries({ queryKey: ["inspirations"] });
       await qc.invalidateQueries({ queryKey: ["canvases"] });
@@ -165,8 +161,8 @@ export default function AddContentModal({ visible, initialUrl, initialText, onCl
       setError("");
       onAdded();
       onClose();
-    } catch {
-      setError("Something went wrong");
+    } catch (err) {
+      setError(formatApiError(err, "Something went wrong"));
     } finally {
       removePendingId(pendingId);
       setLoading(false);
