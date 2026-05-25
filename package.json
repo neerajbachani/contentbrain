@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "bun@1.3.5",
   "workspaces": [
-    "packages/*"
+    "packages/web"
   ],
   "scripts": {
     "dev": "cd packages/web && bunx vite",
