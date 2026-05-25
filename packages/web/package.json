@@ -7,7 +7,6 @@
   },
   "scripts": {
     "build": "vite build",
-    "start": "bun --preload ./src/preload.ts src/server.ts",
     "dev": "vite",
     "lint": "eslint .",
     "preview": "bun run build && vite preview",
