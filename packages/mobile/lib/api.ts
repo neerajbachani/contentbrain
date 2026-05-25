@@ -1,12 +1,9 @@
 import { hc } from "hono/client";
-import { getToken } from "./auth";
+import { getApiAuthHeaders } from "./auth";
 import { getApiBase } from "./apiBase";
 
 const client = hc(getApiBase(), {
-  headers: () => {
-    const token = getToken();
-    return { Authorization: token ?? "" };
-  },
+  headers: () => getApiAuthHeaders(),
 });
 
 export const api = client.api;

@@ -12,7 +12,7 @@ import { PlusIcon, TextTIcon, FlameIcon, LinkIcon } from "phosphor-react-native"
 import { typography } from "../../constants/typography";
 import { api } from "../../lib/api";
 import { getApiBase } from "../../lib/apiBase";
-import { getToken } from "../../lib/auth";
+import { getApiAuthHeaders } from "../../lib/auth";
 import { useCanvasStore, type CanvasRecord, type NodeLayout } from "../../store/canvasStore";
 import { useTheme, useThemedStyles } from "../../theme";
 import type { ThemeColors } from "../../theme/types";
@@ -220,7 +220,7 @@ export default function CanvasScreen() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: getToken() ?? "",
+          ...getApiAuthHeaders(),
         },
         body: JSON.stringify({ layoutJson: JSON.stringify(layout) }),
       });

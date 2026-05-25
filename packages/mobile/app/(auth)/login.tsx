@@ -1,7 +1,9 @@
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useMemo, useState } from "react";
 import { Link, useRouter } from "expo-router";
-import { authClient, captureToken } from "../../lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { authClient, captureToken, sessionCheckQueryKey } from "../../lib/auth";
+import { getApiBase } from "../../lib/apiBase";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BrainIcon } from "phosphor-react-native";
 import { useTheme } from "../../theme";
@@ -10,6 +12,7 @@ import { Button, Text, TextInput } from "../../components/ui";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
   const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +55,7 @@ export default function LoginScreen() {
     if (result.error) {
       setError(result.error.message ?? "Login failed");
     } else {
+      await qc.invalidateQueries({ queryKey: sessionCheckQueryKey(getApiBase()) });
       router.replace("/(tabs)/canvas");
     }
   }

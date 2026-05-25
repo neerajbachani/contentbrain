@@ -6,7 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
-import { getToken } from "../lib/auth";
+import { getApiAuthHeaders, getToken, sessionCheckQueryKey } from "../lib/auth";
 import { getApiBase } from "../lib/apiBase";
 import { ThemeProvider, useTheme } from "../theme";
 
@@ -33,7 +33,7 @@ function AuthGate() {
   }, [API_BASE]);
 
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["session-check", API_BASE],
+    queryKey: sessionCheckQueryKey(API_BASE),
     queryFn: async () => {
       const token = getToken();
       const targetUrl = `${API_BASE}/api/auth/get-session`;
@@ -45,10 +45,7 @@ function AuthGate() {
 
       try {
         const res = await fetch(targetUrl, {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            "expo-origin": "mobile://",
-          },
+          headers: getApiAuthHeaders(),
         });
         logAuth("session fetch response", { status: res.status, ok: res.ok });
         if (!res.ok) return null;

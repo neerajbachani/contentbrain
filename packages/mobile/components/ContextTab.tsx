@@ -8,7 +8,7 @@ import {
   LightningIcon, BookmarkSimpleIcon, ArrowUpIcon, ChatCircleIcon,
   FileTextIcon, SparkleIcon,
 } from "phosphor-react-native";
-import { getToken } from "../lib/auth";
+import { getApiAuthHeaders } from "../lib/auth";
 import { api } from "../lib/api";
 import { getApiBase } from "../lib/apiBase";
 import { useTheme, useThemedStyles } from "../theme";
@@ -309,10 +309,9 @@ export default function ContextTab({ inspirationId, onAddFuel, onSaveToCanvas }:
     setLoading(true);
     setError("");
     try {
-      const token = getToken();
       const base = getApiBase();
       const res = await fetch(`${base}/api/inspirations/${inspirationId}/context`, {
-        headers: { Authorization: token ?? "" },
+        headers: getApiAuthHeaders(),
       });
       const json = (await res.json()) as ContextData;
       if (!res.ok) {
