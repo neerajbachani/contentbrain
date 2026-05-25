@@ -1,11 +1,9 @@
 import {
   Modal, View, Text, StyleSheet, Image, TouchableOpacity,
-  ActivityIndicator, Alert, Linking, Pressable,
+  ActivityIndicator, Alert, Linking, Pressable, Platform,
 } from "react-native";
 import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as FileSystem from "expo-file-system/legacy";
-import * as MediaLibrary from "expo-media-library";
 import { XIcon, DownloadSimpleIcon, ArrowSquareOutIcon } from "phosphor-react-native";
 import { useTheme, useThemedStyles } from "../../theme";
 import type { ThemeColors } from "../../theme/types";
@@ -50,8 +48,19 @@ export default function ImageLightbox({ visible, imageUrl, postUrl, title, onClo
   const [downloading, setDownloading] = useState(false);
 
   async function download() {
+    if (Platform.OS === "web") {
+      // On web: open image in new tab (browser handles save)
+      window.open(imageUrl, "_blank");
+      return;
+    }
+
     setDownloading(true);
     try {
+      // Lazy-load native modules only on native
+      const [FileSystem, MediaLibrary] = await Promise.all([
+        import("expo-file-system/legacy"),
+        import("expo-media-library"),
+      ]);
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Allow photo library access to save images.");
