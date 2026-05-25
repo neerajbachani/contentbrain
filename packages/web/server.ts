@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { readFileSync, existsSync } from "fs";
 import { resolve, extname } from "path";
-import app from "./src/api/index";
 
 const port = 8080;
 const distDir = resolve(import.meta.dir, "dist");
@@ -22,12 +21,28 @@ const mimeTypes: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+// Lazy-loaded API — only imported on first request so server binds instantly
+let apiApp: Hono | null = null;
+async function getApi(): Promise<Hono> {
+  if (!apiApp) {
+    const mod = await import("./src/api/index");
+    apiApp = mod.default as Hono;
+  }
+  return apiApp;
+}
+
 const server = new Hono();
 
-// API routes
-server.route("/", app);
+// Health check — responds immediately, no DB needed
+server.get("/api/health", (c) => c.json({ status: "ok" }));
 
-// Static file serving + SPA fallback
+// All other API routes — lazy load the full app
+server.all("/api/*", async (c) => {
+  const api = await getApi();
+  return api.fetch(c.req.raw);
+});
+
+// Static files from dist/
 server.get("*", async (c) => {
   const url = new URL(c.req.url);
   let filePath = resolve(distDir, url.pathname.replace(/^\//, ""));

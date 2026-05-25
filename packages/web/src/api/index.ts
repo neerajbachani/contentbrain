@@ -21,8 +21,8 @@ declare module "hono" {
   }
 }
 
-// Start background scheduler (safe to call multiple times — idempotent)
-startScheduler();
+// Start background scheduler after a short delay so the server binds first
+setTimeout(() => startScheduler(), 5000);
 
 const app = new Hono()
   .use("*", async (c, next) => {
