@@ -1,8 +1,16 @@
-import app from "./api";
-
 const port = Number(process.env.PORT ?? 3000);
 const distDir = `${import.meta.dir}/../dist`;
 const indexPath = `${distDir}/index.html`;
+
+// Lazy-load heavy API module so server binds instantly
+let _app: any;
+async function getApp() {
+  if (!_app) {
+    const mod = await import("./api");
+    _app = mod.default;
+  }
+  return _app;
+}
 
 const server = Bun.serve({
   port,
@@ -10,6 +18,7 @@ const server = Bun.serve({
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api")) {
+      const app = await getApp();
       return app.fetch(request);
     }
 
@@ -35,6 +44,9 @@ const server = Bun.serve({
 });
 
 console.log(`Web server listening on http://localhost:${server.port}`);
+
+// Pre-warm API module after server is listening
+getApp().catch(console.error);
 
 function getStaticFilePath(pathname: string) {
   const cleanPath = decodeURIComponent(pathname)
