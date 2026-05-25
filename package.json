@@ -10,14 +10,11 @@
     "dev:desktop": "cd packages/desktop && bunx vite",
     "dev:mobile": "cd packages/mobile && bunx expo start",
     "build": "turbo build",
-    "build:web": "bun run --cwd packages/web node_modules/.bin/vite build",
     "typecheck": "turbo typecheck",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
-    "db:studio": "turbo db:studio",
-    "start": "bun run --cwd packages/web node_modules/.bin/vite --port 8080 --host",
-    "start:web": "bun run --cwd packages/web node_modules/.bin/vite --port 8080 --host"
+    "db:studio": "turbo db:studio"
   },
   "devDependencies": {
     "@tursodatabase/api": "^1.9.2",
