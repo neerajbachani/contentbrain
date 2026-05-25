@@ -1,16 +1,8 @@
-const port = Number(process.env.PORT ?? 3000);
+import app from "./api";
+
+const port = Number(process.env.PORT ?? 4200);
 const distDir = `${import.meta.dir}/../dist`;
 const indexPath = `${distDir}/index.html`;
-
-// Lazy-load heavy API module so server binds instantly
-let _app: any;
-async function getApp() {
-  if (!_app) {
-    const mod = await import("./api");
-    _app = mod.default;
-  }
-  return _app;
-}
 
 const server = Bun.serve({
   port,
@@ -18,7 +10,6 @@ const server = Bun.serve({
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api")) {
-      const app = await getApp();
       return app.fetch(request);
     }
 

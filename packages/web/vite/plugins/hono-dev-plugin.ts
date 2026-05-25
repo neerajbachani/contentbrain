@@ -1,4 +1,4 @@
-import type { Plugin, ViteDevServer } from "vite";
+import type { Plugin, ViteDevServer, PreviewServer } from "vite";
 
 export default function honoDevPlugin(): Plugin {
   return {
@@ -6,29 +6,41 @@ export default function honoDevPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api")) return next();
-
-        try {
-          const request = await toWebRequest(req);
-          const app = await loadApp(server);
-          const response = await app.fetch(request);
-
-          res.statusCode = response.status;
-          response.headers.forEach((value: string, key: string) => res.setHeader(key, value));
-          res.end(Buffer.from(await response.arrayBuffer()));
-        } catch (err) {
-          server.ssrFixStacktrace(err as Error);
-          console.error("[hono-dev]", err);
-          res.statusCode = 500;
-          res.end("Internal Server Error");
-        }
+        await handleRequest(req, res, next, (path) => server.ssrLoadModule(path));
+      });
+    },
+    configurePreviewServer(server: PreviewServer) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api")) return next();
+        await handleRequest(req, res, next, async (path) => {
+          // In preview mode, import the compiled API directly
+          return import(/* @vite-ignore */ path);
+        });
       });
     },
   };
 }
 
-async function loadApp(server: ViteDevServer) {
-  const mod = await server.ssrLoadModule("/src/api/index.ts");
-  return mod.default;
+async function handleRequest(
+  req: import("http").IncomingMessage,
+  res: import("http").ServerResponse,
+  next: () => void,
+  loader: (path: string) => Promise<any>
+) {
+  try {
+    const request = toWebRequest(req);
+    const mod = await loader("/src/api/index.ts");
+    const app = mod.default;
+    const response = await app.fetch(request);
+
+    res.statusCode = response.status;
+    response.headers.forEach((value: string, key: string) => res.setHeader(key, value));
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (err) {
+    console.error("[hono-dev]", err);
+    res.statusCode = 500;
+    res.end("Internal Server Error");
+  }
 }
 
 function toWebRequest(req: import("http").IncomingMessage): Request {
