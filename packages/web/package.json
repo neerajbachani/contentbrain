@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "start": "bun --env-file=../../.env src/server.ts",
+    "start": "bun src/server.ts",
     "dev": "vite",
     "lint": "eslint .",
     "preview": "bun run build && vite preview",
