@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "fs";
 import { resolve, extname } from "path";
 import app from "./src/api/index";
 
-const port = Number(process.env.PORT) || 8080;
+const port = 8080;
 const distDir = resolve(import.meta.dir, "dist");
 
 const mimeTypes: Record<string, string> = {
