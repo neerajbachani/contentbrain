@@ -10,6 +10,7 @@
     "dev:desktop": "cd packages/desktop && bunx vite",
     "dev:mobile": "cd packages/mobile && bunx expo start",
     "build": "turbo build",
+    "build:web": "bun run --cwd packages/web build",
     "typecheck": "turbo typecheck",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
