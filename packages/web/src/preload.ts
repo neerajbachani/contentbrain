@@ -21,6 +21,8 @@ if (existsSync(envPath)) {
     ) {
       val = val.slice(1, -1);
     }
+    // Never override PORT — let the platform assign it
+    if (key === "PORT") continue;
     // Don't override vars already injected by platform
     if (key && !process.env[key]) process.env[key] = val;
   }
