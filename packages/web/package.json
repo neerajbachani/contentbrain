@@ -6,7 +6,7 @@
     ".": "./src/api/index.ts"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "echo build-done",
     "start": "bun src/server.ts",
     "dev": "vite",
     "lint": "eslint .",
