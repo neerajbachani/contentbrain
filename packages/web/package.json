@@ -6,7 +6,8 @@
     ".": "./src/api/index.ts"
   },
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
+    "start": "bun src/server.ts",
     "dev": "vite",
     "lint": "eslint .",
     "preview": "bun run build && vite preview",

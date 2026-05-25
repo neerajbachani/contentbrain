@@ -11,6 +11,8 @@
     "dev:mobile": "cd packages/mobile && bunx expo start",
     "build": "turbo build",
     "build:web": "cd packages/web && bun run build",
+    "start": "cd packages/web && bun run start",
+    "start:web": "cd packages/web && bun run start",
     "typecheck": "turbo typecheck",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
