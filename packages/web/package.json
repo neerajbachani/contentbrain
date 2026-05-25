@@ -6,8 +6,8 @@
     ".": "./src/api/index.ts"
   },
   "scripts": {
-    "build": "echo build-done",
-    "start": "bun src/server.ts",
+    "build": "vite build",
+    "start": "bun --preload ./src/preload.ts src/server.ts",
     "dev": "vite",
     "lint": "eslint .",
     "preview": "bun run build && vite preview",
