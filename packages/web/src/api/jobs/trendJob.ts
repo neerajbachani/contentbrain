@@ -65,7 +65,7 @@ export async function runTrendJob(options: TrendJobOptions = {}): Promise<number
       }
 
       if (includeApify && xData.length < 5) {
-        const fallback = await fetchApifyXTrendFallback(5);
+        const fallback = await fetchApifyXTrendFallback(5).catch(() => []);
         const seen = new Set(xData.map((t) => t.url).filter(Boolean));
         for (const item of fallback) {
           if (item.url && seen.has(item.url)) continue;
