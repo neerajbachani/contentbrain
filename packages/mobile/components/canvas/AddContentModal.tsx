@@ -87,7 +87,7 @@ export default function AddContentModal({ visible, initialUrl, initialText, onCl
   const [platform, setPlatform] = useState("custom");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { addPendingId, removePendingId } = useCanvasStore();
+  const { addPendingId, removePendingId, activeCanvasId } = useCanvasStore();
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -149,6 +149,7 @@ export default function AddContentModal({ visible, initialUrl, initialText, onCl
             type: "text",
             title: ogData.title || null,
             ogImage: ogData.imageUrl || null,
+            canvasId: activeCanvasId ?? undefined,
           },
         })
       );

@@ -14,6 +14,75 @@ export type XaiSearchError = {
   bodyPreview?: string;
 };
 
+export type XaiProbeReasonCode =
+  | "auth_invalid"
+  | "entitlement_or_scope"
+  | "x_search_forbidden"
+  | "model_mismatch"
+  | "parse_failed"
+  | "network_error"
+  | "provider_error";
+
+export type XaiTokenProbeResult =
+  | {
+      ok: true;
+      xaiModel: string;
+      xaiBaseUrl: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      status?: number;
+      reasonCode: XaiProbeReasonCode;
+      xaiModel: string;
+      xaiBaseUrl: string;
+      bodyPreview?: string;
+    };
+
+function classifyProbeFailure(
+  status: number | undefined,
+  message: string,
+  bodyPreview?: string
+): XaiProbeReasonCode {
+  const combined = `${message} ${bodyPreview ?? ""}`.toLowerCase();
+  if (status === 401) return "auth_invalid";
+  if (
+    combined.includes("model") &&
+    (combined.includes("unsupported") ||
+      combined.includes("does not exist") ||
+      combined.includes("not found") ||
+      combined.includes("invalid"))
+  ) {
+    return "model_mismatch";
+  }
+  if (combined.includes("x_search") || combined.includes("tool")) return "x_search_forbidden";
+  if (status === 403) return "entitlement_or_scope";
+  return "provider_error";
+}
+
+function describeProbeFailure(
+  reasonCode: XaiProbeReasonCode,
+  status: number | undefined,
+  providerMessage: string
+): string {
+  const statusLabel = status ? `HTTP ${status}` : "provider error";
+  switch (reasonCode) {
+    case "auth_invalid":
+      return `xAI rejected this token (${statusLabel}) for model ${XAI_MODEL}. Re-run Hermes auth and paste the full auth.json again.`;
+    case "model_mismatch":
+      return `xAI rejected the configured model ${XAI_MODEL}. Check XAI_MODEL in the deployed backend. Provider said: ${providerMessage}`;
+    case "x_search_forbidden":
+    case "entitlement_or_scope":
+      return `xAI rejected x_search on model ${XAI_MODEL} (${statusLabel}). This usually means the token/account does not have x_search access for this model. Provider said: ${providerMessage}`;
+    case "parse_failed":
+      return `xAI responded for model ${XAI_MODEL}, but the x_search probe response could not be parsed.`;
+    case "network_error":
+      return `Could not reach xAI while validating model ${XAI_MODEL}. ${providerMessage}`;
+    default:
+      return `xAI validation failed for model ${XAI_MODEL} (${statusLabel}). Provider said: ${providerMessage}`;
+  }
+}
+
 function buildPrompt(input: {
   intent: XContextIntent;
   rawContent: string;
@@ -250,13 +319,10 @@ export async function fetchXaiSearchContext(
 }
 
 /** Lightweight x_search probe for connect-time validation. */
-export async function probeXaiToken(accessToken: string): Promise<{
-  ok: boolean;
-  error?: string;
-  status?: number;
-}> {
+export async function probeXaiToken(accessToken: string): Promise<XaiTokenProbeResult> {
   logXContext("grok_connect_probe_start", {
     model: XAI_MODEL,
+    baseUrl: XAI_BASE,
     tokenPreview: accessToken.slice(0, 12),
   });
 
@@ -283,48 +349,96 @@ export async function probeXaiToken(accessToken: string): Promise<{
     const bodyText = await res.text();
 
     if (!res.ok) {
-      let message = `xAI HTTP ${res.status}`;
+      let providerMessage = `xAI HTTP ${res.status}`;
       try {
         const errJson = JSON.parse(bodyText) as { error?: { code?: string; message?: string } };
-        if (errJson.error?.message) message = errJson.error.message;
-        if (errJson.error?.code) message = `${message} (${errJson.error.code})`;
+        if (errJson.error?.message) providerMessage = errJson.error.message;
+        if (errJson.error?.code) providerMessage = `${providerMessage} (${errJson.error.code})`;
       } catch {
-        if (bodyText) message = bodyText.slice(0, 200);
+        if (bodyText) providerMessage = bodyText.slice(0, 200);
       }
+      const bodyPreview = bodyText.slice(0, 200);
+      const reasonCode = classifyProbeFailure(res.status, providerMessage, bodyPreview);
+      const message = describeProbeFailure(reasonCode, res.status, providerMessage);
       logXContext(
         "grok_connect_probe_failed",
-        { status: res.status, message, bodyPreview: bodyText.slice(0, 200) },
+        {
+          status: res.status,
+          providerMessage,
+          reasonCode,
+          model: XAI_MODEL,
+          baseUrl: XAI_BASE,
+          bodyPreview,
+        },
         "error"
       );
-      return { ok: false, error: message, status: res.status };
+      return {
+        ok: false,
+        error: message,
+        status: res.status,
+        reasonCode,
+        xaiModel: XAI_MODEL,
+        xaiBaseUrl: XAI_BASE,
+        bodyPreview,
+      };
     }
 
     let data: unknown;
     try {
       data = JSON.parse(bodyText);
     } catch {
-      logXContext("grok_connect_probe_failed", { message: "non-JSON response" }, "error");
-      return { ok: false, error: "xAI returned non-JSON response" };
+      logXContext("grok_connect_probe_failed", {
+        message: "non-JSON response",
+        model: XAI_MODEL,
+        baseUrl: XAI_BASE,
+      }, "error");
+      return {
+        ok: false,
+        error: describeProbeFailure("parse_failed", undefined, "xAI returned non-JSON response"),
+        reasonCode: "parse_failed",
+        xaiModel: XAI_MODEL,
+        xaiBaseUrl: XAI_BASE,
+      };
     }
 
     const parsed = parseXaiResponsesPayload(data);
     if (parsed.comments.length === 0 && parsed.relatedPosts.length === 0) {
       logXaiOutputStructure(data);
-      logXContext("grok_connect_probe_failed", { message: "empty parse" }, "warn");
+      logXContext("grok_connect_probe_failed", {
+        message: "empty parse",
+        model: XAI_MODEL,
+        baseUrl: XAI_BASE,
+      }, "warn");
       return {
         ok: false,
-        error: "xAI responded but x_search results could not be parsed — check XAI_MODEL",
+        error: describeProbeFailure("parse_failed", undefined, "empty parse"),
+        reasonCode: "parse_failed",
+        xaiModel: XAI_MODEL,
+        xaiBaseUrl: XAI_BASE,
       };
     }
 
     logXContext("grok_connect_probe_ok", {
       comments: parsed.comments.length,
       posts: parsed.relatedPosts.length,
+      model: XAI_MODEL,
+      baseUrl: XAI_BASE,
     });
-    return { ok: true };
+    return { ok: true, xaiModel: XAI_MODEL, xaiBaseUrl: XAI_BASE };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "network error";
-    logXContext("grok_connect_probe_failed", { message }, "error");
-    return { ok: false, error: message };
+    logXContext("grok_connect_probe_failed", {
+      message,
+      reasonCode: "network_error",
+      model: XAI_MODEL,
+      baseUrl: XAI_BASE,
+    }, "error");
+    return {
+      ok: false,
+      error: describeProbeFailure("network_error", undefined, message),
+      reasonCode: "network_error",
+      xaiModel: XAI_MODEL,
+      xaiBaseUrl: XAI_BASE,
+    };
   }
 }

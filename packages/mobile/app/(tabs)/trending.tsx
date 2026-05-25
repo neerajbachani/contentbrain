@@ -3,7 +3,7 @@ import {
   ActivityIndicator, RefreshControl, Linking, ScrollView, Image, Alert,
 } from "react-native";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemedStyles } from "../../theme";
 import { colors } from "../../constants/colors";
@@ -19,6 +19,7 @@ import {
 import { XLogoIcon } from "../../components/XLogoIcon";
 
 const NICHES = ["tech", "finance", "fitness", "beauty", "food", "gaming", "travel", "fashion", "business", "crypto", "lifestyle", "sports"];
+const MAIN_CANVAS_LABEL = "Main Canvas";
 
 // Test card — inject at top of list to verify UI changes without hitting the API
 const TEST_TWEET: TrendRow = {
@@ -50,6 +51,15 @@ type TodayXNewsGroup = {
   relatedPosts: TrendRow[];
 };
 
+type InspirationCreateResponse = {
+  inspiration?: { id: string };
+  canvas?: {
+    id: string;
+    name: string;
+    target: "main" | "explicit" | "fallback_main";
+  } | null;
+};
+
 function urlDomain(url?: string | null): string | null {
   if (!url) return null;
   try {
@@ -76,16 +86,24 @@ function formatEngagement(score?: number | null): string | null {
   return String(score);
 }
 
+function trendItemKey(item: TrendRow): string {
+  return item.url ?? item.id ?? `${item.platform}-${item.title}`;
+}
+
 function TrendCard({
   item,
   onAddToCanvas,
   onRemix,
+  isAdding = false,
+  addDisabled = false,
   compact = false,
   styles,
 }: {
   item: TrendRow;
   onAddToCanvas: () => void;
   onRemix: () => void;
+  isAdding?: boolean;
+  addDisabled?: boolean;
   compact?: boolean;
   styles: ReturnType<typeof makeTrendingStyles>;
 }) {
@@ -165,9 +183,17 @@ function TrendCard({
         </TouchableOpacity>
 
         <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.addBtn} onPress={onAddToCanvas}>
-            <PlusIcon size={14} color={theme.success} weight="bold" />
-            <Text style={styles.addBtnText}>Add to Canvas</Text>
+          <TouchableOpacity
+            style={[styles.addBtn, addDisabled && styles.addBtnDisabled]}
+            onPress={onAddToCanvas}
+            disabled={addDisabled}
+          >
+            {isAdding ? (
+              <ActivityIndicator size="small" color={theme.success} />
+            ) : (
+              <PlusIcon size={14} color={theme.success} weight="bold" />
+            )}
+            <Text style={styles.addBtnText}>{isAdding ? "Saving..." : "Save to Main"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
             <SparkleIcon size={14} color={theme.buttonSuccessText} weight="fill" />
@@ -188,11 +214,13 @@ function TodayXNewsSection({
   groups,
   onAddToCanvas,
   onRemix,
+  addingKey,
   styles,
 }: {
   groups: TodayXNewsGroup[];
   onAddToCanvas: (item: TrendRow) => void;
   onRemix: (item: TrendRow) => void;
+  addingKey: string | null;
   styles: ReturnType<typeof makeTrendingStyles>;
 }) {
   const theme = useTheme();
@@ -237,6 +265,8 @@ function TodayXNewsSection({
                     styles={styles}
                     onAddToCanvas={() => onAddToCanvas(group.headline)}
                     onRemix={() => onRemix(group.headline)}
+                    isAdding={addingKey === trendItemKey(group.headline)}
+                    addDisabled={addingKey !== null}
                   />
                 ) : null}
                 {group.relatedPosts.map((rel, rIdx) => (
@@ -247,6 +277,8 @@ function TodayXNewsSection({
                     styles={styles}
                     onAddToCanvas={() => onAddToCanvas(rel)}
                     onRemix={() => onRemix(rel)}
+                    isAdding={addingKey === trendItemKey(rel)}
+                    addDisabled={addingKey !== null}
                   />
                 ))}
               </View>
@@ -264,6 +296,7 @@ export default function TrendingScreen() {
   const theme = useTheme();
   const styles = useThemedStyles(makeTrendingStyles);
   const [selectedNiche, setSelectedNiche] = useState("tech");
+  const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const { data, isLoading, refetch, error: trendsError } = useQuery({
     queryKey: ["trends", selectedNiche],
@@ -299,9 +332,21 @@ export default function TrendingScreen() {
     },
   });
 
-  const addToCanvas = useMutation({
-    mutationFn: async (item: TrendRow) => {
-      await apiRequest("POST", "/api/inspirations", () =>
+  async function handleAddToCanvas(item: TrendRow) {
+    const itemKey = trendItemKey(item);
+    if (addingKey) return;
+
+    setAddingKey(itemKey);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    console.log("[CanvasAdd] start", {
+      itemKey,
+      platform: item.platform,
+      url: item.url ?? null,
+      target: MAIN_CANVAS_LABEL,
+    });
+
+    try {
+      const result = await apiRequest<InspirationCreateResponse>("POST", "/api/inspirations", () =>
         api.inspirations.$post({
           json: {
             rawContent: `${stripMarkdown(item.title)}\n\n${displaySummary(item) || ""}`,
@@ -310,16 +355,30 @@ export default function TrendingScreen() {
             type: "text",
             title: stripMarkdown(item.title),
             ogImage: item.thumbnailUrl ?? null,
+            attachToMainCanvas: true,
           },
         })
       );
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["inspirations"] });
+      await qc.invalidateQueries({ queryKey: ["inspirations"] });
+      await qc.invalidateQueries({ queryKey: ["canvases"] });
+      const canvasName = result.canvas?.name ?? MAIN_CANVAS_LABEL;
+      console.log("[CanvasAdd] success", {
+        itemKey,
+        canvasName,
+        target: result.canvas?.target ?? "main",
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-    onError: (err) => Alert.alert("Add to canvas failed", formatApiError(err, "Could not save trend")),
-  });
+      Alert.alert("Saved", `Added to ${canvasName}`);
+    } catch (err) {
+      console.error("[CanvasAdd] failed", {
+        itemKey,
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+      Alert.alert("Add to canvas failed", formatApiError(err, "Could not save trend"));
+    } finally {
+      setAddingKey(null);
+    }
+  }
 
   const handleRemix = async (item: TrendRow) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -356,8 +415,9 @@ export default function TrendingScreen() {
       <TodayXNewsSection
         groups={todayXNews}
         styles={styles}
-        onAddToCanvas={(item) => addToCanvas.mutate(item)}
+        onAddToCanvas={handleAddToCanvas}
         onRemix={handleRemix}
+        addingKey={addingKey}
       />
       {todayXNews.length > 0 ? (
         <Text style={styles.sectionLabel}>Niche Trends</Text>
@@ -416,7 +476,7 @@ export default function TrendingScreen() {
         <FlatList
           data={trends}
           keyExtractor={(item) =>
-            item.url ?? item.id ?? `${item.platform}-${item.title}`
+            trendItemKey(item)
           }
           ListHeaderComponent={ListHeader}
           contentContainerStyle={styles.list}
@@ -425,8 +485,10 @@ export default function TrendingScreen() {
             <TrendCard
               item={item}
               styles={styles}
-              onAddToCanvas={() => addToCanvas.mutate(item)}
+              onAddToCanvas={() => handleAddToCanvas(item)}
               onRemix={() => handleRemix(item)}
+              isAdding={addingKey === trendItemKey(item)}
+              addDisabled={addingKey !== null}
             />
           )}
         />
@@ -508,6 +570,7 @@ function makeTrendingStyles(theme: import("../../theme/types").ThemeColors) {
     expandToggleText: { color: theme.placeholderText, fontSize: 12, fontWeight: "500" as const },
     cardActions: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, marginTop: 4 },
     addBtn: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, borderWidth: 1, borderColor: theme.success, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+    addBtnDisabled: { opacity: 0.6 },
     addBtnText: { color: theme.success, fontSize: 13, fontWeight: "600" as const },
     remixBtn: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, backgroundColor: theme.success, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
     remixBtnText: { color: theme.buttonSuccessText, fontSize: 13, fontWeight: "700" as const },

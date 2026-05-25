@@ -28,6 +28,115 @@ async function enrichContextRelatedPosts(relatedPosts: ContextPost[]) {
   return posts;
 }
 
+const MAIN_CANVAS_NAME = "Main Canvas";
+
+type CanvasAttachTarget = {
+  id: string;
+  name: string;
+  target: "main" | "explicit" | "fallback_main";
+} | null;
+
+function parseJsonArray(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildGridLayout(inspirationIds: string[]) {
+  const layout: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  inspirationIds.forEach((inspId, index) => {
+    const col = index % 3;
+    const row = Math.floor(index / 3);
+    layout[inspId] = { x: 48 + col * 184, y: 48 + row * 156, w: 168, h: 140 };
+  });
+  return layout;
+}
+
+async function attachInspirationToCanvas(
+  userId: string,
+  inspirationId: string,
+  options: { canvasId?: string; attachToMainCanvas?: boolean }
+): Promise<CanvasAttachTarget> {
+  if (!options.canvasId && !options.attachToMainCanvas) return null;
+
+  let canvases = await db
+    .select()
+    .from(schema.canvases)
+    .where(eq(schema.canvases.userId, userId))
+    .orderBy(schema.canvases.updatedAt);
+
+  if (canvases.length === 0) {
+    const inspirations = await db
+      .select({ id: schema.inspirations.id })
+      .from(schema.inspirations)
+      .where(eq(schema.inspirations.userId, userId))
+      .orderBy(schema.inspirations.createdAt);
+    const inspirationIds = inspirations.map((row) => row.id).reverse();
+    const canvasId = randomUUID();
+
+    await db.insert(schema.canvases).values({
+      id: canvasId,
+      userId,
+      name: MAIN_CANVAS_NAME,
+      inspirationIds: JSON.stringify(inspirationIds),
+      remixIds: "[]",
+      layoutJson: JSON.stringify(buildGridLayout(inspirationIds)),
+      viewState: JSON.stringify({ scale: 1, offsetX: 0, offsetY: 0 }),
+      clustersJson: "[]",
+      updatedAt: new Date(),
+    });
+
+    canvases = await db
+      .select()
+      .from(schema.canvases)
+      .where(eq(schema.canvases.userId, userId))
+      .orderBy(schema.canvases.updatedAt);
+  }
+
+  let target = options.canvasId
+    ? canvases.find((canvas) => canvas.id === options.canvasId)
+    : undefined;
+  let targetKind: NonNullable<CanvasAttachTarget>["target"] | null = target ? "explicit" : null;
+
+  if (!target) {
+    const mainCanvas = canvases.find((canvas) => canvas.name === MAIN_CANVAS_NAME) ?? canvases[0];
+    if (!mainCanvas) return null;
+    if (options.attachToMainCanvas) {
+      target = mainCanvas;
+      targetKind = "main";
+    } else if (options.canvasId) {
+      target = mainCanvas;
+      targetKind = "fallback_main";
+    }
+  }
+
+  if (!target || !targetKind) return null;
+
+  const currentIds = parseJsonArray(target.inspirationIds);
+  const mergedIds = [inspirationId, ...currentIds.filter((id) => id !== inspirationId)];
+
+  await db
+    .update(schema.canvases)
+    .set({
+      inspirationIds: JSON.stringify(mergedIds),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.canvases.id, target.id));
+
+  console.info("[canvas] inspiration_attached", {
+    userId,
+    inspirationId,
+    canvasId: target.id,
+    canvasName: target.name,
+    target: targetKind,
+  });
+
+  return { id: target.id, name: target.name, target: targetKind };
+}
+
 export const inspirationsRoute = new Hono()
   .get("/", requireAuth, async (c) => {
     const user = c.get("user")!;
@@ -60,6 +169,9 @@ export const inspirationsRoute = new Hono()
     const user = c.get("user")!;
     const body = await c.req.json();
     let { rawContent, sourceUrl, sourcePlatform, type, title, ogImage } = body;
+    const canvasId =
+      typeof body.canvasId === "string" && body.canvasId.trim() ? body.canvasId.trim() : undefined;
+    const attachToMainCanvas = body.attachToMainCanvas === true;
 
     if (!rawContent) return c.json({ message: "rawContent required" }, 400);
 
@@ -144,7 +256,12 @@ export const inspirationsRoute = new Hono()
       hook: aiData.hook ?? null,
     }).returning();
 
-    return c.json({ inspiration: item }, 201);
+    const canvas = await attachInspirationToCanvas(user.id, id, {
+      canvasId,
+      attachToMainCanvas,
+    });
+
+    return c.json({ inspiration: item, canvas }, 201);
   })
   .delete("/:id", requireAuth, async (c) => {
     const user = c.get("user")!;

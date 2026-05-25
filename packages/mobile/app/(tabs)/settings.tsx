@@ -7,7 +7,7 @@ import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
 import { authClient, clearToken } from "../../lib/auth";
-import { apiRequest, formatApiError } from "../../lib/http";
+import { ApiResponseError, apiRequest, formatApiError } from "../../lib/http";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -37,6 +37,26 @@ const THEME_OPTIONS = [
   { value: "light" as const, label: "Light", Icon: SunIcon },
   { value: "system" as const, label: "System", Icon: SunIcon },
 ];
+
+function formatGrokConnectError(err: unknown) {
+  const base = formatApiError(err, "Could not connect Grok");
+  if (!(err instanceof ApiResponseError) || !err.body || typeof err.body !== "object") {
+    return base;
+  }
+
+  const body = err.body as {
+    upstreamStatus?: number | null;
+    xaiModel?: string;
+    reasonCode?: string;
+  };
+  const details = [
+    body.upstreamStatus ? `xAI status: ${body.upstreamStatus}` : null,
+    body.xaiModel ? `Model: ${body.xaiModel}` : null,
+    body.reasonCode ? `Reason: ${body.reasonCode}` : null,
+  ].filter(Boolean);
+
+  return details.length > 0 ? `${base}\n${details.join("\n")}` : base;
+}
 
 function makeSettingsStyles(theme: ThemeColors) {
   return {
@@ -170,6 +190,7 @@ function makeSettingsStyles(theme: ThemeColors) {
 export default function SettingsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const client = api as any;
   const theme = useTheme();
   const { preference, setPreference } = useThemeContext();
   const styles = useThemedStyles(makeSettingsStyles);
@@ -197,7 +218,7 @@ export default function SettingsScreen() {
           dailyMerges?: number | null;
           dailyTrends?: number | null;
         };
-      }>("GET", "/api/users/profile", () => api.users.profile.$get());
+      }>("GET", "/api/users/profile", () => client.users.profile.$get());
     },
   });
 
@@ -233,7 +254,7 @@ export default function SettingsScreen() {
   async function updateXDataSource(value: string) {
     try {
       await apiRequest("PATCH", "/api/users/settings", () =>
-        api.users.settings.$patch({ json: { xDataSource: value } })
+        client.users.settings.$patch({ json: { xDataSource: value } })
       );
       await qc.invalidateQueries({ queryKey: ["profile"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -249,11 +270,17 @@ export default function SettingsScreen() {
     }
     setConnecting(true);
     try {
-      const body = await apiRequest<{ message?: string; verified?: boolean; connected?: boolean }>(
+      const body = await apiRequest<{
+        message?: string;
+        verified?: boolean;
+        connected?: boolean;
+        xaiModel?: string;
+        xaiBaseUrl?: string;
+      }>(
         "POST",
         "/api/integrations/xai/connect",
         () =>
-          api.integrations.xai.connect.$post({
+          client.integrations.xai.connect.$post({
             json: { accessToken: grokToken.trim() },
           })
       );
@@ -261,14 +288,19 @@ export default function SettingsScreen() {
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.invalidateQueries({ queryKey: ["inspirations"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      console.log("[GrokConnect] success", {
+        xaiModel: body.xaiModel ?? null,
+        xaiBaseUrl: body.xaiBaseUrl ?? null,
+      });
       Alert.alert(
         "Connected",
         body.verified
-          ? "Grok verified with live x_search — open Context again to refresh"
+          ? `Grok verified with live x_search on ${body.xaiModel ?? "the configured model"} — open Context again to refresh`
           : "Grok is ready for live X search"
       );
     } catch (err: unknown) {
-      Alert.alert("Grok connection failed", formatApiError(err, "Could not connect Grok"));
+      console.warn("[GrokConnect] failed", err);
+      Alert.alert("Grok connection failed", formatGrokConnectError(err));
     } finally {
       setConnecting(false);
     }
@@ -277,7 +309,7 @@ export default function SettingsScreen() {
   async function disconnectGrok() {
     try {
       await apiRequest("DELETE", "/api/integrations/xai/disconnect", () =>
-        api.integrations.xai.disconnect.$delete()
+        client.integrations.xai.disconnect.$delete()
       );
       await qc.invalidateQueries({ queryKey: ["profile"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

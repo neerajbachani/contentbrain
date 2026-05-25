@@ -81,6 +81,14 @@ export const xaiIntegrationRoute = new Hono()
     const probe = await probeXaiToken(accessToken);
 
     if (!probe.ok) {
+      const status = probe.status === 401 || probe.status === 403 ? probe.status : 400;
+      logXContext("grok_connect_rejected", {
+        userId: user.id,
+        reasonCode: probe.reasonCode,
+        upstreamStatus: probe.status ?? null,
+        xaiModel: probe.xaiModel,
+        xaiBaseUrl: probe.xaiBaseUrl,
+      }, "warn");
 
       return c.json(
 
@@ -89,10 +97,14 @@ export const xaiIntegrationRoute = new Hono()
           message: probe.error ?? "Grok token failed x_search validation",
 
           verified: false,
+          upstreamStatus: probe.status ?? null,
+          xaiModel: probe.xaiModel,
+          xaiBaseUrl: probe.xaiBaseUrl,
+          reasonCode: probe.reasonCode,
 
         },
 
-        400
+        status
 
       );
 
@@ -107,6 +119,10 @@ export const xaiIntegrationRoute = new Hono()
       tokenPreview: accessToken.slice(0, 12),
 
       fromJson: raw.startsWith("{"),
+
+      xaiModel: probe.xaiModel,
+
+      xaiBaseUrl: probe.xaiBaseUrl,
 
     });
 
@@ -141,7 +157,12 @@ export const xaiIntegrationRoute = new Hono()
 
 
 
-    return c.json({ connected: true, verified: true }, 200);
+    return c.json({
+      connected: true,
+      verified: true,
+      xaiModel: probe.xaiModel,
+      xaiBaseUrl: probe.xaiBaseUrl,
+    }, 200);
 
   })
 
