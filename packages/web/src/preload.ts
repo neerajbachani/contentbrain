@@ -1,14 +1,13 @@
-// Preload: runs before any other imports
-// Loads .env from repo root only if DATABASE_URL not already injected by platform
-import { existsSync } from "fs";
+// Runs before all module imports via bun --preload
+// Uses sync readFileSync so env vars are set before any module executes
+import { existsSync, readFileSync } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const dir = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.resolve(dir, "../../.env");
+// import.meta.dir = packages/web/src — so ../../../ = repo root
+const envPath = path.resolve(import.meta.dir, "../../../.env");
 
-if (existsSync(envPath) && !process.env.DATABASE_URL) {
-  const text = await Bun.file(envPath).text();
+if (existsSync(envPath)) {
+  const text = readFileSync(envPath, "utf8");
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -22,6 +21,7 @@ if (existsSync(envPath) && !process.env.DATABASE_URL) {
     ) {
       val = val.slice(1, -1);
     }
+    // Don't override vars already injected by platform
     if (key && !process.env[key]) process.env[key] = val;
   }
 }
