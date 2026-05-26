@@ -492,7 +492,7 @@ export default function SettingsScreen() {
             <View style={styles.section}>
               <View style={styles.aboutRow}>
                 <BrainIcon size={20} color={theme.success} weight="fill" />
-                <Text style={styles.aboutTitle}>ContentBrain</Text>
+                <Text style={styles.aboutTitle}>Contai</Text>
               </View>
               <Text style={styles.aboutText}>Your AI-powered content creation OS</Text>
               <Text style={styles.version}>Version 1.0.0</Text>

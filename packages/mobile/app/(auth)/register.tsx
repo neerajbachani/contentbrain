@@ -1,11 +1,10 @@
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from "react-native";
 import { useMemo, useState } from "react";
 import { Link, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { authClient, captureToken, sessionCheckQueryKey } from "../../lib/auth";
 import { getApiBase } from "../../lib/apiBase";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BrainIcon } from "phosphor-react-native";
 import { useTheme } from "../../theme";
 import { variables } from "../../theme/variables";
 import { Button, Text, TextInput } from "../../components/ui";
@@ -26,7 +25,8 @@ export default function RegisterScreen() {
         safe: { flex: 1, backgroundColor: theme.appBG },
         container: { flexGrow: 1, justifyContent: "center", padding: variables.spacing5 },
         logo: { alignItems: "center", marginBottom: 40 },
-        appName: { marginTop: variables.spacing3 },
+        logoImage: { width: 92, height: 92 },
+        appName: { marginTop: variables.spacing2 },
         form: { gap: variables.spacing3 },
         error: {
           color: theme.textError,
@@ -72,9 +72,13 @@ export default function RegisterScreen() {
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.logo}>
-            <BrainIcon size={48} color={theme.success} weight="fill" />
+            <Image
+              source={require("../../assets/app-icon.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <Text preset="headline" style={styles.appName}>
-              ContentBrain
+              Contai
             </Text>
           </View>
 

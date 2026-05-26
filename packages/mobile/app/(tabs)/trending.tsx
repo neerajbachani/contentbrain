@@ -2,7 +2,7 @@ import {
   View, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Linking, ScrollView, Image, Alert,
 } from "react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemedStyles } from "../../theme";
@@ -95,6 +95,7 @@ function TrendCard({
   onAddToCanvas,
   onRemix,
   isAdding = false,
+  isAdded = false,
   addDisabled = false,
   compact = false,
   styles,
@@ -103,6 +104,7 @@ function TrendCard({
   onAddToCanvas: () => void;
   onRemix: () => void;
   isAdding?: boolean;
+  isAdded?: boolean;
   addDisabled?: boolean;
   compact?: boolean;
   styles: ReturnType<typeof makeTrendingStyles>;
@@ -193,7 +195,9 @@ function TrendCard({
             ) : (
               <PlusIcon size={14} color={theme.success} weight="bold" />
             )}
-            <Text style={styles.addBtnText}>{isAdding ? "Saving..." : "Save to Main"}</Text>
+            <Text style={styles.addBtnText}>
+              {isAdding ? "Saving..." : isAdded ? "Added" : "Save to Main"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.remixBtn} onPress={onRemix}>
             <SparkleIcon size={14} color={theme.buttonSuccessText} weight="fill" />
@@ -215,12 +219,14 @@ function TodayXNewsSection({
   onAddToCanvas,
   onRemix,
   addingKey,
+  addedKey,
   styles,
 }: {
   groups: TodayXNewsGroup[];
   onAddToCanvas: (item: TrendRow) => void;
   onRemix: (item: TrendRow) => void;
   addingKey: string | null;
+  addedKey: string | null;
   styles: ReturnType<typeof makeTrendingStyles>;
 }) {
   const theme = useTheme();
@@ -266,6 +272,7 @@ function TodayXNewsSection({
                     onAddToCanvas={() => onAddToCanvas(group.headline)}
                     onRemix={() => onRemix(group.headline)}
                     isAdding={addingKey === trendItemKey(group.headline)}
+                    isAdded={addedKey === trendItemKey(group.headline)}
                     addDisabled={addingKey !== null}
                   />
                 ) : null}
@@ -278,6 +285,7 @@ function TodayXNewsSection({
                     onAddToCanvas={() => onAddToCanvas(rel)}
                     onRemix={() => onRemix(rel)}
                     isAdding={addingKey === trendItemKey(rel)}
+                    isAdded={addedKey === trendItemKey(rel)}
                     addDisabled={addingKey !== null}
                   />
                 ))}
@@ -297,6 +305,14 @@ export default function TrendingScreen() {
   const styles = useThemedStyles(makeTrendingStyles);
   const [selectedNiche, setSelectedNiche] = useState("tech");
   const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [addedKey, setAddedKey] = useState<string | null>(null);
+  const addedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (addedResetRef.current) clearTimeout(addedResetRef.current);
+    };
+  }, []);
 
   const { data, isLoading, refetch, error: trendsError } = useQuery({
     queryKey: ["trends", selectedNiche],
@@ -336,6 +352,8 @@ export default function TrendingScreen() {
     const itemKey = trendItemKey(item);
     if (addingKey) return;
 
+    if (addedResetRef.current) clearTimeout(addedResetRef.current);
+    setAddedKey(null);
     setAddingKey(itemKey);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     console.log("[CanvasAdd] start", {
@@ -368,7 +386,10 @@ export default function TrendingScreen() {
         target: result.canvas?.target ?? "main",
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Saved", `Added to ${canvasName}`);
+      setAddedKey(itemKey);
+      addedResetRef.current = setTimeout(() => {
+        setAddedKey((current) => (current === itemKey ? null : current));
+      }, 1800);
     } catch (err) {
       console.error("[CanvasAdd] failed", {
         itemKey,
@@ -418,6 +439,7 @@ export default function TrendingScreen() {
         onAddToCanvas={handleAddToCanvas}
         onRemix={handleRemix}
         addingKey={addingKey}
+        addedKey={addedKey}
       />
       {todayXNews.length > 0 ? (
         <Text style={styles.sectionLabel}>Niche Trends</Text>
@@ -488,6 +510,7 @@ export default function TrendingScreen() {
               onAddToCanvas={() => handleAddToCanvas(item)}
               onRemix={() => handleRemix(item)}
               isAdding={addingKey === trendItemKey(item)}
+              isAdded={addedKey === trendItemKey(item)}
               addDisabled={addingKey !== null}
             />
           )}

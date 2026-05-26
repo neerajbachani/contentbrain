@@ -159,7 +159,7 @@ export default function PlatformPreview({ platform, content, imageUrl, authorLab
           {imageUrl ? (
             <View style={styles.linkedInBlock}>
               <Image source={{ uri: imageUrl }} style={styles.media} resizeMode="cover" />
-              <Text style={styles.linkedInLink}>contentbrain.app</Text>
+              <Text style={styles.linkedInLink}>contai.app</Text>
             </View>
           ) : null}
         </View>
@@ -185,7 +185,7 @@ export default function PlatformPreview({ platform, content, imageUrl, authorLab
       {platform === "reddit" && (
         <View style={styles.card}>
           <View style={styles.redditPill}>
-            <Text style={styles.redditPillText}>r/contentbrain</Text>
+            <Text style={styles.redditPillText}>r/contai</Text>
           </View>
           <Text style={[styles.body, { fontWeight: "700", paddingBottom: 4 }]}>
             {content.split("\n")[0]?.slice(0, 120)}
